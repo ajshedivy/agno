@@ -10,8 +10,10 @@ vector_db = Qdrant(collection=COLLECTION_NAME, url="http://localhost:6333")
 
 # Create a knowledge base with the PDFs from the data/pdfs directory
 knowledge_base = YouTubeKnowledgeBase(
-    urls=["https://www.youtube.com/watch?v=CDC3GOuJyZ0",
-          "https://www.youtube.com/watch?v=JbF_8g1EXj4"],
+    urls=[
+        "https://www.youtube.com/watch?v=CDC3GOuJyZ0",
+        "https://www.youtube.com/watch?v=JbF_8g1EXj4",
+    ],
     vector_db=vector_db,
     reader=YouTubeReader(chunk=True),
 )
@@ -26,5 +28,9 @@ if __name__ == "__main__":
     asyncio.run(knowledge_base.aload(recreate=False))
 
     # Create and use the agent
-    asyncio.run(agent.aprint_response(
-        "What is the major focus of the knowledge provided in both the videos, explain briefly.", markdown=True))
+    asyncio.run(
+        agent.aprint_response(
+            "What is the major focus of the knowledge provided in both the videos, explain briefly.",
+            markdown=True,
+        )
+    )
