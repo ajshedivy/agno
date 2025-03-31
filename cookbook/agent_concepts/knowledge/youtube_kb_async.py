@@ -8,7 +8,6 @@ COLLECTION_NAME = "youtube-reader"
 
 vector_db = Qdrant(collection=COLLECTION_NAME, url="http://localhost:6333")
 
-# Create a knowledge base with the PDFs from the data/pdfs directory
 knowledge_base = YouTubeKnowledgeBase(
     urls=[
         "https://www.youtube.com/watch?v=CDC3GOuJyZ0",
