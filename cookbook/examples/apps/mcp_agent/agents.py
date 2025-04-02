@@ -151,7 +151,14 @@ def get_mcp_agent(
 
 @asynccontextmanager
 async def get_mcp_agent_with_tools(
-    agent: Agent, server_config: Optional[MCPServerConfig] = None
+    user_id: Optional[str] = None,
+    model_id: str = "openai:gpt-4o",
+    session_id: Optional[str] = None,
+    num_history_responses: int = 5,
+    mcp_tools: Optional[List[MCPTools]] = None,
+    mcp_server_ids: Optional[List[str]] = None,
+    debug_mode: bool = True,
+    server_config: Optional[MCPServerConfig] = None,
 ) -> AsyncGenerator[Agent, None]:
     # Define server parameters
     server_params = StdioServerParameters(
@@ -160,7 +167,15 @@ async def get_mcp_agent_with_tools(
     )
 
     async with MCPTools(server_params=server_params) as tools:
-        agent.tools.append(tools)
+        agent = get_mcp_agent(
+            user_id=user_id,
+            model_id=model_id,
+            session_id=session_id,
+            num_history_responses=num_history_responses,
+            mcp_tools=[tools],
+            mcp_server_ids=mcp_server_ids,
+            debug_mode=debug_mode,
+        )
 
         try:
             # Perform any setup or initialization here

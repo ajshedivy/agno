@@ -159,7 +159,11 @@ async def body() -> None:
                         logger.info(f"Using session ID: {current_session_id}")
 
                         async with get_mcp_agent_with_tools(
-                            agent=mcp_agent, server_config=mcp_server_config
+                            model_id=selected_model,
+                            session_id=current_session_id,
+                            num_history_responses=num_history_responses,
+                            mcp_server_ids=[mcp_server_id],
+                            server_config=mcp_server_config
                         ) as temp_agent:
                             # Process the request with temporary agent that has full context
                             run_response = await temp_agent.arun(
