@@ -659,6 +659,11 @@ class Agent:
 
                         yield self.run_response
 
+                    if model_response_chunk.image is not None:
+                        self.add_image(model_response_chunk.image)
+
+                        yield self.run_response
+
                 # If the model response is a tool_call_started, add the tool call to the run_response
                 elif model_response_chunk.event == ModelResponseEvent.tool_call_started.value:
                     # Add tool calls to the run_response
@@ -748,6 +753,9 @@ class Agent:
             # Update the run_response audio with the model response audio
             if model_response.audio is not None:
                 self.run_response.response_audio = model_response.audio
+
+            if model_response.image is not None:
+                self.add_image(model_response.image)
 
             # Update the run_response messages with the messages
             self.run_response.messages = run_messages.messages
@@ -1071,7 +1079,7 @@ class Agent:
         log_debug(f"Async Agent Run Start: {self.run_response.run_id}", center=True, symbol="*")
 
         # 2. Update the Model and resolve context
-        self.update_model()
+        self.update_model(async_mode=True)  # use async search for vector db
         self.run_response.model = self.model.id if self.model is not None else None
         if self.context is not None and self.resolve_context:
             self.resolve_run_context()
@@ -1179,6 +1187,11 @@ class Agent:
 
                         yield self.run_response
 
+                    if model_response_chunk.image is not None:
+                        self.add_image(model_response_chunk.image)
+
+                        yield self.run_response
+
                 # If the model response is a tool_call_started, add the tool call to the run_response
                 elif model_response_chunk.event == ModelResponseEvent.tool_call_started.value:
                     # Add tool calls to the run_response
@@ -1269,6 +1282,9 @@ class Agent:
             # Update the run_response audio with the model response audio
             if model_response.audio is not None:
                 self.run_response.response_audio = model_response.audio
+
+            if model_response.image is not None:
+                self.add_image(model_response.image)
 
             # Update the run_response messages with the messages
             self.run_response.messages = run_messages.messages
@@ -1547,7 +1563,7 @@ class Agent:
             rr.created_at = created_at
         return rr
 
-    def get_tools(self) -> Optional[List[Union[Toolkit, Callable, Function, Dict]]]:
+    def get_tools(self, async_mode: bool = False) -> Optional[List[Union[Toolkit, Callable, Function, Dict]]]:
         self.memory = cast(AgentMemory, self.memory)
         agent_tools: List[Union[Toolkit, Callable, Function, Dict]] = []
 
@@ -1567,7 +1583,11 @@ class Agent:
         # Add tools for accessing knowledge
         if self.knowledge is not None or self.retriever is not None:
             if self.search_knowledge:
-                agent_tools.append(self.search_knowledge_base)
+                # Use async or sync search based on async_mode
+                if async_mode:
+                    agent_tools.append(self.async_search_knowledge_base)
+                else:
+                    agent_tools.append(self.search_knowledge_base)
             if self.update_knowledge:
                 agent_tools.append(self.add_to_knowledge)
 
@@ -1578,11 +1598,11 @@ class Agent:
 
         return agent_tools
 
-    def add_tools_to_model(self, model: Model) -> None:
+    def add_tools_to_model(self, model: Model, async_mode: bool = False) -> None:
         # Skip if functions_for_model is not None
         if self._functions_for_model is None or self._tools_for_model is None:
             # Get Agent tools
-            agent_tools = self.get_tools()
+            agent_tools = self.get_tools(async_mode=async_mode)
             if agent_tools is not None and len(agent_tools) > 0:
                 log_debug("Processing tools for model")
 
@@ -1647,7 +1667,7 @@ class Agent:
                 # Set functions on the model
                 model.set_functions(functions=self._functions_for_model)
 
-    def update_model(self) -> None:
+    def update_model(self, async_mode: bool = False) -> None:
         # Use the default Model (OpenAIChat) if no model is provided
         if self.model is None:
             try:
@@ -1698,7 +1718,7 @@ class Agent:
                 self.model.structured_outputs = False
 
         # Add tools to the Model
-        self.add_tools_to_model(model=self.model)
+        self.add_tools_to_model(model=self.model, async_mode=async_mode)
 
         # Set show_tool_calls on the Model
         if self.show_tool_calls is not None:
@@ -2762,8 +2782,37 @@ class Agent:
         if self.knowledge is None:
             return None
 
-        # TODO: add async support
         relevant_docs: List[Document] = self.knowledge.search(query=query, num_documents=num_documents, **kwargs)
+        if len(relevant_docs) == 0:
+            return None
+        return [doc.to_dict() for doc in relevant_docs]
+
+    async def aget_relevant_docs_from_knowledge(
+        self, query: str, num_documents: Optional[int] = None, **kwargs
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Get relevant documents from knowledge base asynchronously."""
+        from agno.document import Document
+
+        if self.retriever is not None and callable(self.retriever):
+            from inspect import signature
+
+            try:
+                sig = signature(self.retriever)
+                retriever_kwargs: Dict[str, Any] = {}
+                if "agent" in sig.parameters:
+                    retriever_kwargs = {"agent": self}
+                retriever_kwargs.update({"query": query, "num_documents": num_documents, **kwargs})
+                return self.retriever(**retriever_kwargs)
+            except Exception as e:
+                log_warning(f"Retriever failed: {e}")
+                return None
+
+        if self.knowledge is None or self.knowledge.vector_db is None:
+            return None
+
+        relevant_docs: List[Document] = await self.knowledge.async_search(
+            query=query, num_documents=num_documents, **kwargs
+        )
         if len(relevant_docs) == 0:
             return None
         return [doc.to_dict() for doc in relevant_docs]
@@ -3522,6 +3571,35 @@ class Agent:
                 query=query, references=docs_from_knowledge, time=round(retrieval_timer.elapsed, 4)
             )
             # Add the references to the run_response
+            if self.run_response.extra_data is None:
+                self.run_response.extra_data = RunResponseExtraData()
+            if self.run_response.extra_data.references is None:
+                self.run_response.extra_data.references = []
+            self.run_response.extra_data.references.append(references)
+        retrieval_timer.stop()
+        log_debug(f"Time to get references: {retrieval_timer.elapsed:.4f}s")
+
+        if docs_from_knowledge is None:
+            return "No documents found"
+        return self.convert_documents_to_string(docs_from_knowledge)
+
+    async def async_search_knowledge_base(self, query: str) -> str:
+        """Use this function to search the knowledge base for information about a query asynchronously.
+
+        Args:
+            query: The query to search for.
+
+        Returns:
+            str: A string containing the response from the knowledge base.
+        """
+        self.run_response = cast(RunResponse, self.run_response)
+        retrieval_timer = Timer()
+        retrieval_timer.start()
+        docs_from_knowledge = await self.aget_relevant_docs_from_knowledge(query=query)
+        if docs_from_knowledge is not None:
+            references = MessageReferences(
+                query=query, references=docs_from_knowledge, time=round(retrieval_timer.elapsed, 4)
+            )
             if self.run_response.extra_data is None:
                 self.run_response.extra_data = RunResponseExtraData()
             if self.run_response.extra_data.references is None:
