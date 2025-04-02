@@ -14,7 +14,6 @@ from agno.storage.agent.sqlite import SqliteAgentStorage
 from agno.tools.mcp import MCPTools
 from agno.vectordb.lancedb import LanceDb, SearchType
 from mcp import StdioServerParameters
-
 from mcp_client import MCPServerConfig
 
 # ************* Setup Paths *************
@@ -86,9 +85,7 @@ def get_mcp_agent(
             """\n
             You have access to the following MCP servers:
             {}
-        """.format(
-                "\n".join([f"- {server_id}" for server_id in mcp_server_ids])
-            )
+        """.format("\n".join([f"- {server_id}" for server_id in mcp_server_ids]))
         )
 
     instructions = dedent(

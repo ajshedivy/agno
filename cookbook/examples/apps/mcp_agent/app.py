@@ -163,7 +163,7 @@ async def body() -> None:
                             session_id=current_session_id,
                             num_history_responses=num_history_responses,
                             mcp_server_ids=[mcp_server_id],
-                            server_config=mcp_server_config
+                            server_config=mcp_server_config,
                         ) as temp_agent:
                             # Process the request with temporary agent that has full context
                             run_response = await temp_agent.arun(
@@ -194,9 +194,9 @@ async def body() -> None:
 
                             # Update session ID in case it changed
                             # (This maintains continuity for the next query)
-                            st.session_state[agent_name][
-                                "session_id"
-                            ] = temp_agent.session_id
+                            st.session_state[agent_name]["session_id"] = (
+                                temp_agent.session_id
+                            )
 
                     except Exception as e:
                         logger.error(f"Error during agent run: {str(e)}", exc_info=True)
