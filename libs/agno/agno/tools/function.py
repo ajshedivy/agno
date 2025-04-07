@@ -48,6 +48,10 @@ class Function(BaseModel):
     )
     strict: Optional[bool] = None
 
+    instructions: Optional[str] = None
+    # If True, add instructions to the Agent's system message
+    add_instructions: bool = True
+
     # The function to be called.
     entrypoint: Optional[Callable] = None
     # If True, the entrypoint processing is skipped and the Function is used as is.
@@ -209,6 +213,18 @@ class Function(BaseModel):
                     for name, param in sig.parameters.items()
                     if param.default == param.empty and name != "self" and name != "agent"
                 ]
+
+            if params_set_by_user:
+                self.parameters["additionalProperties"] = False
+                if strict:
+                    self.parameters["required"] = [name for name in self.parameters["properties"] if name != "agent"]
+                else:
+                    # Mark a field as required if it has no default value
+                    self.parameters["required"] = [
+                        name
+                        for name, param in sig.parameters.items()
+                        if param.default == param.empty and name != "self" and name != "agent"
+                    ]
 
             # log_debug(f"JSON schema for {self.name}: {parameters}")
         except Exception as e:
