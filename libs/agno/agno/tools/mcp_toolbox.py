@@ -15,7 +15,6 @@ class MCPToolbox(MCPTools):
     def __init__(
         self,
         url: str = None,
-        toolset_name: Optional[str] = None,
         toolsets: Optional[List[str]] = None,
         tool_name: Optional[str] = None,
         headers: Optional[Dict[str, Any]] = None,
