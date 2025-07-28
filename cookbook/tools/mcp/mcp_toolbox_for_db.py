@@ -7,10 +7,8 @@ from textwrap import dedent
 
 from agno.agent import Agent
 from agno.tools.mcp_toolbox import MCPToolbox
-from agno.tools.sql import SQLTools
 
 url = "http://127.0.0.1:5001"  # Remove the /mcp suffix
-DATABASE_URL = "postgresql://toolbox_user:my-password@localhost:5432/toolbox_db"
 
 
 async def run_agent(message: str) -> None:
@@ -23,7 +21,7 @@ async def run_agent(message: str) -> None:
         print(db_tools.functions)  # Print available tools for debugging
         # returns a list of tools from a toolset
         agent = Agent(
-            tools=[SQLTools(db_url=DATABASE_URL, run_sql_query=False), db_tools],
+            tools=[db_tools],
             instructions=dedent(
                 """ \
                 You're a helpful hotel assistant. You handle hotel searching, booking and
@@ -64,7 +62,7 @@ async def run_agent_manual_loading(message: str) -> None:
         )
 
         # Combine tools as needed
-        selected_tools = [SQLTools(db_url=DATABASE_URL, run_sql_query=False)]
+        selected_tools = []
         selected_tools.extend(hotel_tools)
         selected_tools.extend(booking_tools[:2])  # Only first 2 booking tools
 
