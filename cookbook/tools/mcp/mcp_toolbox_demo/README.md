@@ -2,7 +2,7 @@
 
 This demo showcases how to set up and run an AI agent that can interact with a PostgreSQL database through the [MCP Toolbox for Databases](https://googleapis.github.io/genai-toolbox/getting-started/introduction/). The agent acts as a hotel assistant capable of searching, booking, and canceling hotel reservations.
 
-MCP Toolbox for Databases (MCP Toolbox) provides a unified interface to interact with databases using AI agents. It simplifies database operations by providing a set of tools that can be used in conjunction with AI models. 
+MCP Toolbox for Databases (MCP Toolbox) provides a unified interface for AI agents to interact with databases.
 
 In this demo, we have a collection of tools (defined in `config/tools.yaml`) that allow the agent to perform various hotel management tasks, such as searching for hotels, making bookings, and retrieving hotel information. The tools are groups into two toolsets:
 - `hotel-management`: For searching and retrieving hotel information
