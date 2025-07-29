@@ -35,11 +35,6 @@ class MCPToolbox(MCPTools):
         if len(non_none_params) > 1:
             raise ValueError("Only one of toolset_name, toolsets, or tool_name can be specified")
 
-        self.__core_client = ToolboxClient(
-            url=self.toolbox_url,
-            client_headers=headers,
-        )
-
     async def load_tool(
         self,
         tool_name: str,
@@ -219,6 +214,10 @@ class MCPToolbox(MCPTools):
         """Initialize the direct toolbox client."""
 
         await super().__aenter__()
+        self.__core_client = ToolboxClient(
+            url=self.toolbox_url,
+            client_headers=self.headers,
+        )
         if self.toolsets is not None:
             # Load multiple toolsets
             all_functions = await self.load_multiple_toolsets(toolset_names=self.toolsets)

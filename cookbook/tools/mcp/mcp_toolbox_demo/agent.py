@@ -18,7 +18,6 @@ async def run_agent(message: str = None) -> None:
     async with MCPToolbox(
         url=url, toolsets=["hotel-management", "booking-system"]
     ) as db_tools:
-        print(db_tools.functions)  # Print available tools for debugging
         # returns a list of tools from a toolset
         agent = Agent(
             tools=[db_tools],
@@ -36,7 +35,7 @@ async def run_agent(message: str = None) -> None:
             markdown=True,
             show_tool_calls=True,
             add_history_to_messages=True,
-            debug_mode=True,
+            debug_mode=False,
         )
 
         # Run an interactive command-line interface to interact with the agent.
