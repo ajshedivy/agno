@@ -33,7 +33,7 @@ class MCPToolbox(MCPTools):
         filter_params = [toolsets, tool_name]
         non_none_params = [p for p in filter_params if p is not None]
         if len(non_none_params) > 1:
-            raise ValueError("Only one of toolset_name, toolsets, or tool_name can be specified")
+            raise ValueError("Only one of toolsets, or tool_name can be specified")
 
     async def load_tool(
         self,
