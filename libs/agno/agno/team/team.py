@@ -688,15 +688,6 @@ class Team:
             if self.workflow_session_state is not None:
                 self.workflow_session_state["current_user_id"] = user_id
 
-    def _reset_session_state(self) -> None:
-        """Reset the session state for the agent."""
-        if self.team_session_state is not None:
-            self.team_session_state.pop("current_session_id", None)
-            self.team_session_state.pop("current_user_id", None)
-        if self.session_state is not None:
-            self.session_state.pop("current_session_id", None)
-            self.session_state.pop("current_user_id", None)
-
     def _initialize_session(
         self,
         session_id: Optional[str] = None,
@@ -974,8 +965,6 @@ class Team:
                         from_run_response=run_response,
                         session_id=session_id,
                     )
-            finally:
-                self._reset_session_state()
 
         # If we get here, all retries failed
         if last_exception is not None:
@@ -1363,8 +1352,6 @@ class Team:
                         from_run_response=run_response,
                         session_id=session_id,
                     )
-            finally:
-                self._reset_session_state()
 
         # If we get here, all retries failed
         if last_exception is not None:
@@ -2869,7 +2856,7 @@ class Team:
                     if self.response_model is not None:
                         team_markdown = False
 
-                if isinstance(resp, tuple(get_args(TeamRunResponseEvent))):
+                if isinstance(resp, tuple(get_args(TeamRunResponseEvent))) and resp.team_id==self.team_id:
                     if resp.event == TeamRunEvent.run_response_content:
                         if isinstance(resp.content, str):
                             _response_content += resp.content
@@ -2900,7 +2887,7 @@ class Team:
                             team_tool_calls.append(tool)
 
                 # Collect member tool calls, avoiding duplicates
-                if self.show_tool_calls and hasattr(resp, "member_responses") and resp.member_responses:
+                if self.show_tool_calls and hasattr(resp, "member_responses") and resp.member_responses and self.show_members_responses:
                     for member_response in resp.member_responses:
                         member_id = None
                         if isinstance(member_response, RunResponse) and member_response.agent_id is not None:
@@ -2931,6 +2918,7 @@ class Team:
                 # Create new panels for each chunk
                 panels = []
 
+                # Print user message
                 if message and show_message:
                     render = True
                     # Convert message to a panel
@@ -2963,60 +2951,61 @@ class Team:
                     panels.append(status)
 
                 # Process member responses and their tool calls
-                for member_response in resp.member_responses if hasattr(resp, "member_responses") else []:
-                    member_id = None
-                    member_name = "Team Member"
-                    if isinstance(member_response, RunResponse) and member_response.agent_id is not None:
-                        member_id = member_response.agent_id
-                        member_name = self._get_member_name(member_id)
-                    elif isinstance(member_response, TeamRunResponse) and member_response.team_id is not None:
-                        member_id = member_response.team_id
-                        member_name = self._get_member_name(member_id)
+                if self.show_members_responses and hasattr(resp, "member_responses") and resp.member_responses:
+                    for member_response in resp.member_responses:
+                        member_id = None
+                        member_name = "Team Member"
+                        if isinstance(member_response, RunResponse) and member_response.agent_id is not None:
+                            member_id = member_response.agent_id
+                            member_name = self._get_member_name(member_id)
+                        elif isinstance(member_response, TeamRunResponse) and member_response.team_id is not None:
+                            member_id = member_response.team_id
+                            member_name = self._get_member_name(member_id)
 
-                    # If we have tool calls for this member, display them
-                    if self.show_tool_calls and member_id in member_tool_calls and member_tool_calls[member_id]:
-                        formatted_calls = format_tool_calls(member_tool_calls[member_id])
-                        if formatted_calls:
-                            console_width = console.width if console else 80
-                            panel_width = console_width + 30
+                        # If we have tool calls for this member, display them
+                        if self.show_tool_calls and member_id in member_tool_calls and member_tool_calls[member_id]:
+                            formatted_calls = format_tool_calls(member_tool_calls[member_id])
+                            if formatted_calls:
+                                console_width = console.width if console else 80
+                                panel_width = console_width + 30
 
-                            lines = []
-                            for call in formatted_calls:
-                                wrapped_call = textwrap.fill(f"• {call}", width=panel_width, subsequent_indent="  ")
-                                lines.append(wrapped_call)
+                                lines = []
+                                for call in formatted_calls:
+                                    wrapped_call = textwrap.fill(f"• {call}", width=panel_width, subsequent_indent="  ")
+                                    lines.append(wrapped_call)
 
-                            tool_calls_text = "\n\n".join(lines)
+                                tool_calls_text = "\n\n".join(lines)
 
-                            member_tool_calls_panel = create_panel(
-                                content=tool_calls_text,
-                                title=f"{member_name} Tool Calls",
-                                border_style="yellow",
-                            )
-                            panels.append(member_tool_calls_panel)
+                                member_tool_calls_panel = create_panel(
+                                    content=tool_calls_text,
+                                    title=f"{member_name} Tool Calls",
+                                    border_style="yellow",
+                                )
+                                panels.append(member_tool_calls_panel)
 
-                    # Process member response content
-                    if self.show_members_responses and member_id is not None:
-                        show_markdown = False
-                        if markdown:
-                            show_markdown = True
-
-                        member_response_content = self._parse_response_content(
-                            member_response,
-                            tags_to_include_in_markdown,
-                            show_markdown=show_markdown,
-                        )
-
-                        member_response_panel = create_panel(
-                            content=member_response_content,
-                            title=f"{member_name} Response",
-                            border_style="magenta",
-                        )
-
-                        panels.append(member_response_panel)
-
-                        # Store for reference
+                        # Process member response content
                         if member_id is not None:
-                            member_response_panels[member_id] = member_response_panel
+                            show_markdown = False
+                            if markdown:
+                                show_markdown = True
+
+                            member_response_content = self._parse_response_content(
+                                member_response,
+                                tags_to_include_in_markdown,
+                                show_markdown=show_markdown,
+                            )
+
+                            member_response_panel = create_panel(
+                                content=member_response_content,
+                                title=f"{member_name} Response",
+                                border_style="magenta",
+                            )
+
+                            panels.append(member_response_panel)
+
+                            # Store for reference
+                            if member_id is not None:
+                                member_response_panels[member_id] = member_response_panel
 
                 # Add team tool calls panel if available (before the team response)
                 if self.show_tool_calls and team_tool_calls:
@@ -3141,90 +3130,91 @@ class Team:
                 final_panels.append(thinking_panel)
 
             # Add member tool calls and responses in correct order
-            for i, member_response in enumerate(self.run_response.member_responses if self.run_response else []):
-                member_id = None
-                if isinstance(member_response, RunResponse) and member_response.agent_id is not None:
-                    member_id = member_response.agent_id
-                elif isinstance(member_response, TeamRunResponse) and member_response.team_id is not None:
-                    member_id = member_response.team_id
-
-                if member_id:
-                    # First add tool calls if any
-                    if self.show_tool_calls and member_id in member_tool_calls and member_tool_calls[member_id]:
-                        formatted_calls = format_tool_calls(member_tool_calls[member_id])
-                        if formatted_calls:
-                            console_width = console.width if console else 80
-                            panel_width = console_width + 30
-
-                            lines = []
-                            for call in formatted_calls:
-                                wrapped_call = textwrap.fill(f"• {call}", width=panel_width, subsequent_indent="  ")
-                                lines.append(wrapped_call)
-
-                            tool_calls_text = "\n\n".join(lines)
-
-                            member_name = self._get_member_name(member_id)
-                            member_tool_calls_panel = create_panel(
-                                content=tool_calls_text,
-                                title=f"{member_name} Tool Calls",
-                                border_style="yellow",
-                            )
-                            final_panels.append(member_tool_calls_panel)
-
-                    # Add reasoning steps if any
-                    reasoning_steps = []
-                    if (
-                        member_response.extra_data is not None
-                        and member_response.extra_data.reasoning_steps is not None
-                    ):
-                        reasoning_steps = member_response.extra_data.reasoning_steps
-                    if reasoning_steps and show_reasoning:
-                        for j, step in enumerate(reasoning_steps, 1):
-                            member_reasoning_panel = self._build_reasoning_step_panel(
-                                j, step, show_full_reasoning, color="magenta"
-                            )
-                            final_panels.append(member_reasoning_panel)
-
-                    # Then add response
-                    show_markdown = False
+            if self.show_members_responses:
+                for i, member_response in enumerate(self.run_response.member_responses if self.run_response else []):
+                    member_id = None
                     if isinstance(member_response, RunResponse) and member_response.agent_id is not None:
-                        show_markdown = member_markdown.get(member_response.agent_id, False)
+                        member_id = member_response.agent_id
                     elif isinstance(member_response, TeamRunResponse) and member_response.team_id is not None:
-                        show_markdown = member_markdown.get(member_response.team_id, False)
+                        member_id = member_response.team_id
 
-                    member_response_content = self._parse_response_content(
-                        member_response,
-                        tags_to_include_in_markdown,
-                        show_markdown=show_markdown,
-                    )
+                    if member_id:
+                        # First add tool calls if any
+                        if self.show_tool_calls and member_id in member_tool_calls and member_tool_calls[member_id]:
+                            formatted_calls = format_tool_calls(member_tool_calls[member_id])
+                            if formatted_calls:
+                                console_width = console.width if console else 80
+                                panel_width = console_width + 30
 
-                    member_name = "Team Member"
-                    if isinstance(member_response, RunResponse) and member_response.agent_id is not None:
-                        member_name = self._get_member_name(member_response.agent_id)
-                    elif isinstance(member_response, TeamRunResponse) and member_response.team_id is not None:
-                        member_name = self._get_member_name(member_response.team_id)
+                                lines = []
+                                for call in formatted_calls:
+                                    wrapped_call = textwrap.fill(f"• {call}", width=panel_width, subsequent_indent="  ")
+                                    lines.append(wrapped_call)
 
-                    member_response_panel = create_panel(
-                        content=member_response_content,
-                        title=f"{member_name} Response",
-                        border_style="magenta",
-                    )
-                    final_panels.append(member_response_panel)
+                                tool_calls_text = "\n\n".join(lines)
 
-                    # Add citations if any
-                    if member_response.citations is not None and member_response.citations.urls is not None:
-                        md_content = "\n".join(
-                            f"{i + 1}. [{citation.title or citation.url}]({citation.url})"
-                            for i, citation in enumerate(member_response.citations.urls)
-                            if citation.url  # Only include citations with valid URLs
+                                member_name = self._get_member_name(member_id)
+                                member_tool_calls_panel = create_panel(
+                                    content=tool_calls_text,
+                                    title=f"{member_name} Tool Calls",
+                                    border_style="yellow",
+                                )
+                                final_panels.append(member_tool_calls_panel)
+
+                        # Add reasoning steps if any
+                        reasoning_steps = []
+                        if (
+                            member_response.extra_data is not None
+                            and member_response.extra_data.reasoning_steps is not None
+                        ):
+                            reasoning_steps = member_response.extra_data.reasoning_steps
+                        if reasoning_steps and show_reasoning:
+                            for j, step in enumerate(reasoning_steps, 1):
+                                member_reasoning_panel = self._build_reasoning_step_panel(
+                                    j, step, show_full_reasoning, color="magenta"
+                                )
+                                final_panels.append(member_reasoning_panel)
+
+                        # Then add response
+                        show_markdown = False
+                        if isinstance(member_response, RunResponse) and member_response.agent_id is not None:
+                            show_markdown = member_markdown.get(member_response.agent_id, False)
+                        elif isinstance(member_response, TeamRunResponse) and member_response.team_id is not None:
+                            show_markdown = member_markdown.get(member_response.team_id, False)
+
+                        member_response_content = self._parse_response_content(
+                            member_response,
+                            tags_to_include_in_markdown,
+                            show_markdown=show_markdown,
                         )
-                        if md_content:  # Only create panel if there are citations
-                            citations_panel = create_panel(
-                                content=Markdown(md_content),
-                                title="Citations",
-                                border_style="magenta",
+
+                        member_name = "Team Member"
+                        if isinstance(member_response, RunResponse) and member_response.agent_id is not None:
+                            member_name = self._get_member_name(member_response.agent_id)
+                        elif isinstance(member_response, TeamRunResponse) and member_response.team_id is not None:
+                            member_name = self._get_member_name(member_response.team_id)
+
+                        member_response_panel = create_panel(
+                            content=member_response_content,
+                            title=f"{member_name} Response",
+                            border_style="magenta",
+                        )
+                        final_panels.append(member_response_panel)
+
+                        # Add citations if any
+                        if member_response.citations is not None and member_response.citations.urls is not None:
+                            md_content = "\n".join(
+                                f"{i + 1}. [{citation.title or citation.url}]({citation.url})"
+                                for i, citation in enumerate(member_response.citations.urls)
+                                if citation.url  # Only include citations with valid URLs
                             )
-                            final_panels.append(citations_panel)
+                            if md_content:  # Only create panel if there are citations
+                                citations_panel = create_panel(
+                                    content=Markdown(md_content),
+                                    title="Citations",
+                                    border_style="magenta",
+                                )
+                                final_panels.append(citations_panel)
 
             # Add team tool calls before team response
             if self.show_tool_calls and team_tool_calls:
@@ -3735,7 +3725,7 @@ class Team:
                     if self.response_model is not None:
                         team_markdown = False
 
-                if isinstance(resp, tuple(get_args(TeamRunResponseEvent))):
+                if isinstance(resp, tuple(get_args(TeamRunResponseEvent))) and resp.team_id==self.team_id:
                     if resp.event == TeamRunEvent.run_response_content:
                         if isinstance(resp.content, str):
                             _response_content += resp.content
@@ -3766,7 +3756,7 @@ class Team:
                             team_tool_calls.append(tool)
 
                 # Collect member tool calls, avoiding duplicates
-                if self.show_tool_calls and hasattr(resp, "member_responses") and resp.member_responses:
+                if self.show_tool_calls and hasattr(resp, "member_responses") and resp.member_responses and self.show_members_responses:
                     for member_response in resp.member_responses:
                         member_id = None
                         if isinstance(member_response, RunResponse) and member_response.agent_id is not None:
@@ -3942,95 +3932,96 @@ class Team:
                 final_panels.append(thinking_panel)
 
             # Add member tool calls and responses in correct order
-            for i, member_response in enumerate(self.run_response.member_responses if self.run_response else []):
-                member_id = None
-                if isinstance(member_response, RunResponse) and member_response.agent_id is not None:
-                    member_id = member_response.agent_id
-                elif isinstance(member_response, TeamRunResponse) and member_response.team_id is not None:
-                    member_id = member_response.team_id
-
-                if member_id:
-                    # First add tool calls if any
-                    if self.show_tool_calls and member_id in member_tool_calls and member_tool_calls[member_id]:
-                        formatted_calls = format_tool_calls(member_tool_calls[member_id])
-                        if formatted_calls:
-                            console_width = console.width if console else 80
-                            panel_width = console_width + 30
-
-                            lines = []
-                            # Create a set to track already added calls by their string representation
-                            added_calls = set()
-                            for call in formatted_calls:
-                                if call not in added_calls:
-                                    added_calls.add(call)
-                                    # Wrap the call text to fit within the panel
-                                    wrapped_call = textwrap.fill(f"• {call}", width=panel_width, subsequent_indent="  ")
-                                    lines.append(wrapped_call)
-
-                            tool_calls_text = "\n\n".join(lines)
-
-                            member_name = self._get_member_name(member_id)
-                            member_tool_calls_panel = create_panel(
-                                content=tool_calls_text,
-                                title=f"{member_name} Tool Calls",
-                                border_style="yellow",
-                            )
-                            final_panels.append(member_tool_calls_panel)
-
-                    # Add reasoning steps if any
-                    reasoning_steps = []
-                    if (
-                        member_response.extra_data is not None
-                        and member_response.extra_data.reasoning_steps is not None
-                    ):
-                        reasoning_steps = member_response.extra_data.reasoning_steps
-                    if reasoning_steps and show_reasoning:
-                        for j, step in enumerate(reasoning_steps, 1):
-                            member_reasoning_panel = self._build_reasoning_step_panel(
-                                j, step, show_full_reasoning, color="magenta"
-                            )
-                            final_panels.append(member_reasoning_panel)
-
-                    # Then add response
-                    show_markdown = False
+            if self.show_members_responses:
+                for i, member_response in enumerate(self.run_response.member_responses if self.run_response else []):
+                    member_id = None
                     if isinstance(member_response, RunResponse) and member_response.agent_id is not None:
-                        show_markdown = member_markdown.get(member_response.agent_id, False)
+                        member_id = member_response.agent_id
                     elif isinstance(member_response, TeamRunResponse) and member_response.team_id is not None:
-                        show_markdown = member_markdown.get(member_response.team_id, False)
+                        member_id = member_response.team_id
 
-                    member_response_content = self._parse_response_content(
-                        member_response,
-                        tags_to_include_in_markdown,
-                        show_markdown=show_markdown,
-                    )
+                    if member_id:
+                        # First add tool calls if any
+                        if self.show_tool_calls and member_id in member_tool_calls and member_tool_calls[member_id]:
+                            formatted_calls = format_tool_calls(member_tool_calls[member_id])
+                            if formatted_calls:
+                                console_width = console.width if console else 80
+                                panel_width = console_width + 30
 
-                    member_name = "Team Member"
-                    if isinstance(member_response, RunResponse) and member_response.agent_id is not None:
-                        member_name = self._get_member_name(member_response.agent_id)
-                    elif isinstance(member_response, TeamRunResponse) and member_response.team_id is not None:
-                        member_name = self._get_member_name(member_response.team_id)
+                                lines = []
+                                # Create a set to track already added calls by their string representation
+                                added_calls = set()
+                                for call in formatted_calls:
+                                    if call not in added_calls:
+                                        added_calls.add(call)
+                                        # Wrap the call text to fit within the panel
+                                        wrapped_call = textwrap.fill(f"• {call}", width=panel_width, subsequent_indent="  ")
+                                        lines.append(wrapped_call)
 
-                    member_response_panel = create_panel(
-                        content=member_response_content,
-                        title=f"{member_name} Response",
-                        border_style="magenta",
-                    )
-                    final_panels.append(member_response_panel)
+                                tool_calls_text = "\n\n".join(lines)
 
-                    # Add citations if any
-                    if member_response.citations is not None and member_response.citations.urls is not None:
-                        md_content = "\n".join(
-                            f"{i + 1}. [{citation.title or citation.url}]({citation.url})"
-                            for i, citation in enumerate(member_response.citations.urls)
-                            if citation.url  # Only include citations with valid URLs
+                                member_name = self._get_member_name(member_id)
+                                member_tool_calls_panel = create_panel(
+                                    content=tool_calls_text,
+                                    title=f"{member_name} Tool Calls",
+                                    border_style="yellow",
+                                )
+                                final_panels.append(member_tool_calls_panel)
+
+                        # Add reasoning steps if any
+                        reasoning_steps = []
+                        if (
+                            member_response.extra_data is not None
+                            and member_response.extra_data.reasoning_steps is not None
+                        ):
+                            reasoning_steps = member_response.extra_data.reasoning_steps
+                        if reasoning_steps and show_reasoning:
+                            for j, step in enumerate(reasoning_steps, 1):
+                                member_reasoning_panel = self._build_reasoning_step_panel(
+                                    j, step, show_full_reasoning, color="magenta"
+                                )
+                                final_panels.append(member_reasoning_panel)
+
+                        # Then add response
+                        show_markdown = False
+                        if isinstance(member_response, RunResponse) and member_response.agent_id is not None:
+                            show_markdown = member_markdown.get(member_response.agent_id, False)
+                        elif isinstance(member_response, TeamRunResponse) and member_response.team_id is not None:
+                            show_markdown = member_markdown.get(member_response.team_id, False)
+
+                        member_response_content = self._parse_response_content(
+                            member_response,
+                            tags_to_include_in_markdown,
+                            show_markdown=show_markdown,
                         )
-                        if md_content:  # Only create panel if there are citations
-                            citations_panel = create_panel(
-                                content=Markdown(md_content),
-                                title="Citations",
-                                border_style="magenta",
+
+                        member_name = "Team Member"
+                        if isinstance(member_response, RunResponse) and member_response.agent_id is not None:
+                            member_name = self._get_member_name(member_response.agent_id)
+                        elif isinstance(member_response, TeamRunResponse) and member_response.team_id is not None:
+                            member_name = self._get_member_name(member_response.team_id)
+
+                        member_response_panel = create_panel(
+                            content=member_response_content,
+                            title=f"{member_name} Response",
+                            border_style="magenta",
+                        )
+                        final_panels.append(member_response_panel)
+
+                        # Add citations if any
+                        if member_response.citations is not None and member_response.citations.urls is not None:
+                            md_content = "\n".join(
+                                f"{i + 1}. [{citation.title or citation.url}]({citation.url})"
+                                for i, citation in enumerate(member_response.citations.urls)
+                                if citation.url  # Only include citations with valid URLs
                             )
-                            final_panels.append(citations_panel)
+                            if md_content:  # Only create panel if there are citations
+                                citations_panel = create_panel(
+                                    content=Markdown(md_content),
+                                    title="Citations",
+                                    border_style="magenta",
+                                )
+                                final_panels.append(citations_panel)
 
             # Add team tool calls before team response
             if self.show_tool_calls and team_tool_calls:
@@ -7385,6 +7376,9 @@ class Team:
         """Return a list of references from the knowledge base"""
         from agno.document import Document
 
+        if num_documents is None and self.knowledge is not None:
+            num_documents = self.knowledge.num_documents
+
         # Validate the filters against known valid filter keys
         if self.knowledge is not None:
             valid_filters, invalid_keys = self.knowledge.validate_filters(filters)  # type: ignore
@@ -7419,9 +7413,6 @@ class Team:
             if self.knowledge is None or self.knowledge.vector_db is None:
                 return None
 
-            if num_documents is None:
-                num_documents = self.knowledge.num_documents
-
             log_debug(f"Searching knowledge base with filters: {filters}")
             relevant_docs: List[Document] = self.knowledge.search(
                 query=query, num_documents=num_documents, filters=filters
@@ -7441,6 +7432,9 @@ class Team:
     ) -> Optional[List[Union[Dict[str, Any], str]]]:
         """Get relevant documents from knowledge base asynchronously."""
         from agno.document import Document
+
+        if num_documents is None and self.knowledge is not None:
+            num_documents = self.knowledge.num_documents
 
         # Validate the filters against known valid filter keys
         if self.knowledge is not None:
@@ -7477,9 +7471,6 @@ class Team:
         try:
             if self.knowledge is None or self.knowledge.vector_db is None:
                 return None
-
-            if num_documents is None:
-                num_documents = self.knowledge.num_documents
 
             log_debug(f"Searching knowledge base with filters: {filters}")
             relevant_docs: List[Document] = await self.knowledge.async_search(
