@@ -1,8 +1,9 @@
 import asyncio
 from textwrap import dedent
+
 from agno.agent import Agent
-from agno.tools.mcp_toolbox import MCPToolbox
 from agno.playground import Playground
+from agno.tools.mcp_toolbox import MCPToolbox
 
 agent = Agent(
     tools=[],
@@ -23,6 +24,7 @@ agent = Agent(
     debug_mode=False,
 )
 
+
 async def main():
     """Main function to serve the playground"""
     try:
@@ -37,6 +39,7 @@ async def main():
             await playground.serve(app="test_async_tools:app", reload=True)
     finally:
         pass
+
 
 if __name__ == "__main__":
     asyncio.run(main())

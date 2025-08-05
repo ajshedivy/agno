@@ -88,9 +88,41 @@ async def run_agent_manual_loading(message: str) -> None:
         await agent.acli_app(message=message, stream=True)
 
 
+async def run_agent_no_ctx_manager(message: str = None) -> None:
+    """Run an interactive CLI for the GitHub agent with the given message."""
+
+    # Approach 1: Load specific toolset at initialization
+    toolbox = MCPToolbox(url=url, toolsets=["hotel-management", "booking-system"])
+
+    await toolbox.connect()
+
+    agent = Agent(
+        tools=[toolbox],
+        instructions=dedent(
+            """ \
+            You're a helpful hotel assistant. You handle hotel searching, booking and
+            cancellations. When the user searches for a hotel, mention it's name, id,
+                location and price tier. Always mention hotel ids while performing any
+                searches. This is very important for any operations. For any bookings or
+                cancellations, please provide the appropriate confirmation. Be sure to
+                update checkin or checkout dates if mentioned by the user.
+                Don't ask for confirmations from the user.
+            """
+        ),
+        markdown=True,
+        show_tool_calls=True,
+        add_history_to_messages=True,
+        debug_mode=True,
+    )
+
+    await agent.acli_app(message=message, stream=True)
+
+
 if __name__ == "__main__":
-    # Use the original approach
     asyncio.run(run_agent(message=None))
 
     # Or use the manual loading approach
     # asyncio.run(run_agent_manual_loading(message=None))
+
+    # Or use without context manager
+    # asyncio.run(run_agent_no_ctx_manager(message=None))
