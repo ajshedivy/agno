@@ -78,6 +78,10 @@ class OpenAIResponses(Model):
         }
     )
 
+    def _using_reasoning_model(self) -> bool:
+        """Return True if the contextual used model is a known reasoning model."""
+        return self.id.startswith("o3") or self.id.startswith("o4-mini") or self.id.startswith("gpt-5")
+
     def _get_client_params(self) -> Dict[str, Any]:
         """
         Get client parameters for API requests.
@@ -221,7 +225,7 @@ class OpenAIResponses(Model):
             request_params["tool_choice"] = tool_choice
 
         # Handle reasoning tools for o3 and o4-mini models
-        if (self.id.startswith("o3") or self.id.startswith("o4-mini")) and messages is not None:
+        if self._using_reasoning_model() and messages is not None:
             request_params["store"] = True
 
             # Check if the last assistant message has a previous_response_id to continue from
@@ -352,6 +356,33 @@ class OpenAIResponses(Model):
             Dict[str, Any]: The formatted message.
         """
         formatted_messages: List[Dict[str, Any]] = []
+
+        if self._using_reasoning_model():
+            # Detect whether we're chaining via previous_response_id. If so, we should NOT
+            # re-send prior function_call items; the Responses API already has the state and
+            # expects only the corresponding function_call_output items.
+            previous_response_id: Optional[str] = None
+            for msg in reversed(messages):
+                if (
+                    msg.role == "assistant"
+                    and hasattr(msg, "provider_data")
+                    and msg.provider_data
+                    and "response_id" in msg.provider_data
+                ):
+                    previous_response_id = msg.provider_data["response_id"]
+                    break
+
+        # Build a mapping from function_call id (fc_*) → call_id (call_*) from prior assistant tool_calls
+        fc_id_to_call_id: Dict[str, str] = {}
+        for msg in messages:
+            tool_calls = getattr(msg, "tool_calls", None)
+            if tool_calls:
+                for tc in tool_calls:
+                    fc_id = tc.get("id")
+                    call_id = tc.get("call_id") or fc_id
+                    if isinstance(fc_id, str) and isinstance(call_id, str):
+                        fc_id_to_call_id[fc_id] = call_id
+
         for message in messages:
             if message.role in ["user", "system"]:
                 message_dict: Dict[str, Any] = {
@@ -378,18 +409,32 @@ class OpenAIResponses(Model):
 
                 formatted_messages.append(message_dict)
 
+            # Tool call result
             elif message.role == "tool":
                 if message.tool_call_id and message.content is not None:
+                    function_call_id = message.tool_call_id
+                    # Normalize: if a fc_* id was provided, translate to its corresponding call_* id
+                    if isinstance(function_call_id, str) and function_call_id in fc_id_to_call_id:
+                        call_id_value = fc_id_to_call_id[function_call_id]
+                    else:
+                        call_id_value = function_call_id
                     formatted_messages.append(
-                        {"type": "function_call_output", "call_id": message.tool_call_id, "output": message.content}
+                        {"type": "function_call_output", "call_id": call_id_value, "output": message.content}
                     )
+            # Tool Calls
             elif message.tool_calls is not None and len(message.tool_calls) > 0:
+                # Only skip re-sending prior function_call items when we have a previous_response_id
+                # (reasoning models). For non-reasoning models, we must include the prior function_call
+                # so the API can associate the subsequent function_call_output by call_id.
+                if self._using_reasoning_model() and previous_response_id is not None:
+                    continue
+
                 for tool_call in message.tool_calls:
                     formatted_messages.append(
                         {
                             "type": "function_call",
-                            "id": tool_call["id"],
-                            "call_id": tool_call["call_id"],
+                            "id": tool_call.get("id"),
+                            "call_id": tool_call.get("call_id", tool_call.get("id")),
                             "name": tool_call["function"]["name"],
                             "arguments": tool_call["function"]["arguments"],
                             "status": "completed",
@@ -690,7 +735,8 @@ class OpenAIResponses(Model):
                 model_response.tool_calls.append(
                     {
                         "id": output.id,
-                        "call_id": output.call_id,
+                        # Store additional call_id from OpenAI responses
+                        "call_id": output.call_id or output.id,
                         "type": "function",
                         "function": {
                             "name": output.name,
@@ -780,8 +826,8 @@ class OpenAIResponses(Model):
             item = stream_event.item
             if item.type == "function_call":
                 tool_use = {
-                    "id": item.id,
-                    "call_id": item.call_id,
+                    "id": getattr(item, "id", None),
+                    "call_id": getattr(item, "call_id", None) or getattr(item, "id", None),
                     "type": "function",
                     "function": {
                         "name": item.name,
