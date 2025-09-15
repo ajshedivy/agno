@@ -57,7 +57,7 @@ Test the database connection:
 ```bash
 docker-compose exec db psql -U toolbox_user -d toolbox_db -c "SELECT COUNT(*) FROM hotels;"
 ```
-Expected output: `10` (sample hotels loaded)
+You should see a count of the hotels in the database.
 
 ### 2. Install Python Dependencies
 
@@ -68,9 +68,15 @@ uv sync
 
 ### 3. Run the Hotel Management Agent
 
+Setup OpenAI API key:
 ```bash
-# Activate the virtual environment and run the agent
-uv run python agent.py
+export OPENAI_API_KEY="your_openai_api_key"
+```
+
+Start the agent:
+```bash
+# Activate the virtual environment and run the agent or use uv
+uv run agent.py
 ```
 
 The agent will start an interactive CLI where you can:
@@ -90,12 +96,49 @@ Once the agent is running, try these commands:
 > What are the available hotels in Zurich?
 ```
 
-### 4. Run the Playground
-To run the MCP Playground with the agent:
+### 4. Run AgentOS
+To run the AgentOS:
 
 ```bash
-uv run playground.py
+uv run agent_os.py
 ```
+
+Connect AgentOS Control Plane to `http://localhost:7777` and interact with the agent via the web interface.
+
+### 5. Run Workflows
+To run Hotel booking workflow:
+
+```bash
+uv run hotel_management_workflows.py
+```
+
+This workflow searches for boutique hotels in Zurich, then books the first available hotel. Here is sample output:
+
+```bash
+$ uv run workflow_demo.py 
+🏨 Hotel Search and Booking Workflow
+Request: Find luxury hotels in Zurich and book the first available one
+==================================================
+INFO Executing async step (non-streaming): Search Hotels                                                                
+INFO Executing async step (non-streaming): Book Hotel                                                                   
+INFO Successfully created table 'agno_sessions'                                                                         
+
+✅ Workflow Result:
+Content: The hotel has been successfully booked!
+
+- **Hotel Name**: The Ritz-Carlton Zurich
+- **Hotel ID**: 4
+```
+
+### 6. Run Type-Safe Agent
+To run the type-safe agent:
+```bash
+uv run hotel_management_typesafe.py
+```
+
+This agent uses Pydantic models to ensure type safety when interacting with the database.
+
+
 
 ## Service Configuration
 
@@ -106,6 +149,8 @@ uv run playground.py
   - Database: `toolbox_db`
   - User: `toolbox_user`
   - Password: `my-password`
+
+>> Note: These are test credentials. Do not use in production.
 
 ### Agent Configuration
 

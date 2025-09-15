@@ -63,10 +63,30 @@ tools:
         type: string
         description: The ID of the hotel to cancel.
     statement: UPDATE hotels SET booked = B'0' WHERE id = $1;
+  find-hotels-by-tier-and-location:
+    kind: postgres-sql
+    source: my-pg-source
+    description: >-
+      Find hotels based on location. and price tier. Returns hotels that
+      match the criteria
+    parameters:
+      - name: location
+        type: string
+        description: The location to search for hotels (city or region).
+      - name: tier
+        type: string
+        description: The hotel tier/category (Luxury, Economy, Boutique, Extended-Stay).
+    statement: >-
+      SELECT *
+      FROM hotels 
+      WHERE location ILIKE '%' || $1 || '%' 
+      AND price_tier ILIKE '%' || $2 || '%' 
+      ORDER BY name;
 toolsets:
   hotel-management:
     - search-hotels-by-name
     - search-hotels-by-location
+    - find-hotels-by-tier-and-location
   booking-system:
     - book-hotel
     - update-hotel

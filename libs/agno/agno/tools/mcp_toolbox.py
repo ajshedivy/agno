@@ -11,8 +11,16 @@ try:
 except ImportError:
     raise ImportError("`toolbox_core` not installed. Please install using `pip install toolbox-core`.")
 
+class MCPToolsMeta(type):
+    """Metaclass for MCPTools to ensure proper initialization with AgentOS"""
 
-class MCPToolbox(MCPTools):
+    @property
+    def __name__(cls):
+        return "MCPTools"
+    
+
+
+class MCPToolbox(MCPTools, metaclass=MCPToolsMeta):
     """
     A toolkit that combines MCPTools server connectivity with MCP Toolbox for Databases client (toolbox-core).
 

@@ -2,11 +2,17 @@ import asyncio
 from textwrap import dedent
 
 from agno.agent import Agent
-from agno.playground import Playground
+from agno.os import AgentOS
 from agno.tools.mcp_toolbox import MCPToolbox
 
+url = "http://127.0.0.1:5001"
+
+mcp_database_tools = MCPToolbox(
+    url=url, toolsets=["hotel-management", "booking-system"]
+)
+
 agent = Agent(
-    tools=[],
+    tools=[mcp_database_tools],
     instructions=dedent(
         """ \
         You're a helpful hotel assistant. You handle hotel searching, booking and
@@ -19,27 +25,16 @@ agent = Agent(
     """
     ),
     markdown=True,
-    show_tool_calls=True,
-    add_history_to_messages=True,
-    debug_mode=False,
 )
 
 
-async def main():
-    """Main function to serve the playground"""
-    try:
-        async with MCPToolbox(url="http://127.0.0.1:5001") as tools:
-            agent.tools.extend([tools])
-            playground = Playground(
-                agents=[agent],
-                name="Test MCP Playground",
-                description="A playground for testing MCP tools",
-            )
-            app = playground.get_app()
-            await playground.serve(app="test_async_tools:app", reload=True)
-    finally:
-        pass
+agent_os = AgentOS(
+    name="Hotel Assistant",
+    description="An agent that helps users find and book hotels.",
+    agents=[agent],
+)
 
+app = agent_os.get_app()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    agent_os.serve(app="agent_os:app", reload=True)

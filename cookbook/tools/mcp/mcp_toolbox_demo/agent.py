@@ -6,13 +6,14 @@ import asyncio
 from textwrap import dedent
 
 from agno.agent import Agent
+from agno.models.openai import OpenAIChat
 from agno.tools.mcp_toolbox import MCPToolbox
 
 url = "http://127.0.0.1:5001"  # Remove the /mcp suffix
 
 
 async def run_agent(message: str = None) -> None:
-    """Run an interactive CLI for the GitHub agent with the given message."""
+    """Run an interactive CLI for the Hotel agent with the given message."""
 
     # Approach 1: Load specific toolset at initialization
     async with MCPToolbox(
@@ -20,6 +21,7 @@ async def run_agent(message: str = None) -> None:
     ) as db_tools:
         # returns a list of tools from a toolset
         agent = Agent(
+            model=OpenAIChat(),
             tools=[db_tools],
             instructions=dedent(
                 """ \
@@ -33,9 +35,6 @@ async def run_agent(message: str = None) -> None:
             """
             ),
             markdown=True,
-            show_tool_calls=True,
-            add_history_to_messages=True,
-            debug_mode=True,
         )
 
         # Run an interactive command-line interface to interact with the agent.
