@@ -1,10 +1,5 @@
-from agno.agent.agent import (
-    Agent,
-    AgentSession,
-    Function,
-    Message,
-    Toolkit,
-)
+from agno.agent.agent import Agent, AgentSession, Function, Message, Toolkit
+from agno.agent.mcp_agent import MCPAgent
 from agno.run.agent import (
     MemoryUpdateCompletedEvent,
     MemoryUpdateStartedEvent,
@@ -48,4 +43,5 @@ __all__ = [
     "ReasoningCompletedEvent",
     "ToolCallStartedEvent",
     "ToolCallCompletedEvent",
+    "MCPAgent",
 ]
