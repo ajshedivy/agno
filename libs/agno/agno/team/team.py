@@ -33,6 +33,7 @@ from agno.agent import Agent
 from agno.db.base import BaseDb, SessionType, UserMemory
 from agno.exceptions import ModelProviderError, RunCancelledException
 from agno.knowledge.knowledge import Knowledge
+from agno.knowledge.types import KnowledgeFilter
 from agno.media import Audio, File, Image, Video
 from agno.memory import MemoryManager
 from agno.models.base import Model
@@ -104,7 +105,7 @@ from agno.utils.response import (
     generator_wrapper,
 )
 from agno.utils.safe_formatter import SafeFormatter
-from agno.utils.string import parse_response_model_str
+from agno.utils.string import generate_id_from_name, parse_response_model_str
 from agno.utils.team import format_member_agent_task, get_member_id
 from agno.utils.timer import Timer
 
@@ -515,6 +516,11 @@ class Team:
         self.num_history_runs = num_history_runs
         self.metadata = metadata
 
+        if add_history_to_context and not db:
+            log_warning(
+                "add_history_to_context is True, but no database has been assigned to the agent. History will not be added to the context."
+            )
+
         self.reasoning = reasoning
         self.reasoning_model = reasoning_model
         self.reasoning_agent = reasoning_agent
@@ -580,10 +586,7 @@ class Team:
         If the name is not provided, generate a random UUID.
         """
         if self.id is None:
-            if self.name is not None:
-                self.id = self.name.lower().replace(" ", "-")
-            else:
-                self.id = str(uuid4())
+            self.id = generate_id_from_name(self.name)
 
     def _set_debug(self, debug_mode: Optional[bool] = None) -> None:
         if self.debug_mode or debug_mode or getenv("AGNO_DEBUG", "false").lower() == "true":
@@ -659,8 +662,6 @@ class Team:
             member.set_id()
 
         elif isinstance(member, Team):
-            if member.id is None:
-                member.id = str(uuid4())
             member.parent_team_id = self.id
             for sub_member in member.members:
                 self._initialize_member(sub_member, debug_mode=debug_mode)
@@ -732,9 +733,19 @@ class Team:
         if user_id is None:
             user_id = self.user_id
 
-        # Determine the session_state
+        # Determine the session_state with proper precedence
         if session_state is None:
             session_state = self.session_state or {}
+        else:
+            # If run session_state is provided, merge agent defaults under it
+            # This ensures run state takes precedence over agent defaults
+            if self.session_state:
+                from agno.utils.merge_dict import merge_dictionaries
+
+                base_state = self.session_state.copy()
+                merge_dictionaries(base_state, session_state)
+                session_state.clear()
+                session_state.update(base_state)
 
         if user_id is not None:
             session_state["current_user_id"] = user_id
@@ -834,6 +845,7 @@ class Team:
             functions=self._functions_for_model,
             tool_choice=self.tool_choice,
             tool_call_limit=self.tool_call_limit,
+            send_media_to_model=self.send_media_to_model,
         )
 
         # Check for cancellation after model call
@@ -853,7 +865,15 @@ class Team:
         else:
             self._scrub_media_from_run_output(run_response)
 
-        # 3. Update Team Memory
+        run_response.status = RunStatus.completed
+
+        # Parse team response model
+        self._convert_response_to_structured_format(run_response=run_response)
+
+        # 3. Add the RunOutput to Team Session
+        session.upsert_run(run_response=run_response)
+
+        # 4. Update Team Memory
         response_iterator = self._make_memories_and_summaries(
             run_response=run_response,
             run_messages=run_messages,
@@ -861,14 +881,6 @@ class Team:
             user_id=user_id,
         )
         deque(response_iterator, maxlen=0)
-
-        run_response.status = RunStatus.completed
-
-        # Parse team response model
-        self._convert_response_to_structured_format(run_response=run_response)
-
-        # 4. Add the RunOutput to Team Session
-        session.upsert_run(run_response=run_response)
 
         # 5. Calculate session metrics
         self._update_session_metrics(session=session)
@@ -978,18 +990,18 @@ class Team:
                 session=session, run_response=run_response, stream_intermediate_steps=stream_intermediate_steps
             )
 
-            # 3. Update Team Memory
+            run_response.status = RunStatus.completed
+
+            # 3. Add the run to Team Session
+            session.upsert_run(run_response=run_response)
+
+            # 4. Update Team Memory
             yield from self._make_memories_and_summaries(
                 run_response=run_response,
                 run_messages=run_messages,
                 session=session,
                 user_id=user_id,
             )
-
-            run_response.status = RunStatus.completed
-
-            # 4. Add the run to memory
-            session.upsert_run(run_response=run_response)
 
             # 5. Calculate session metrics
             self._update_session_metrics(session=session)
@@ -1126,13 +1138,17 @@ class Team:
         # Initialize Team
         self.initialize_team(debug_mode=debug_mode)
 
-        image_artifacts, video_artifacts, audio_artifacts = self._validate_media_object_id(
-            images=images, videos=videos, audios=audio
+        image_artifacts, video_artifacts, audio_artifacts, file_artifacts = self._validate_media_object_id(
+            images=images, videos=videos, audios=audio, files=files
         )
 
         # Create RunInput to capture the original user input
         run_input = TeamRunInput(
-            input_content=input, images=image_artifacts, videos=video_artifacts, audios=audio_artifacts, files=files
+            input_content=input,
+            images=image_artifacts,
+            videos=video_artifacts,
+            audios=audio_artifacts,
+            files=file_artifacts,
         )
 
         # Read existing session from database
@@ -1231,7 +1247,9 @@ class Team:
             workflow_context=workflow_context,
             debug_mode=debug_mode,
             add_history_to_context=add_history,
+            add_session_state_to_context=add_session_state,
             dependencies=run_dependencies,
+            add_dependencies_to_context=add_dependencies,
             metadata=metadata,
         )
 
@@ -1416,6 +1434,7 @@ class Team:
             tool_choice=self.tool_choice,
             tool_call_limit=self.tool_call_limit,
             response_format=response_format,
+            send_media_to_model=self.send_media_to_model,
         )  # type: ignore
 
         # Check for cancellation after model call
@@ -1435,7 +1454,15 @@ class Team:
         else:
             self._scrub_media_from_run_output(run_response)
 
-        # 5. Update Team Memory
+        run_response.status = RunStatus.completed
+
+        # Parse team response model
+        self._convert_response_to_structured_format(run_response=run_response)
+
+        # 5. Add the run to memory
+        session.upsert_run(run_response=run_response)
+
+        # 6. Update Team Memory
         async for _ in self._amake_memories_and_summaries(
             run_response=run_response,
             session=session,
@@ -1443,14 +1470,6 @@ class Team:
             user_id=user_id,
         ):
             pass
-
-        run_response.status = RunStatus.completed
-
-        # Parse team response model
-        self._convert_response_to_structured_format(run_response=run_response)
-
-        # 6. Add the run to memory
-        session.upsert_run(run_response=run_response)
 
         # 7. Calculate session metrics
         self._update_session_metrics(session=session)
@@ -1599,6 +1618,11 @@ class Team:
             ):
                 yield event
 
+            run_response.status = RunStatus.completed
+
+            # 5. Add the run to Team Session
+            session.upsert_run(run_response=run_response)
+
             # 6. Update Team Memory
             async for event in self._amake_memories_and_summaries(
                 run_response=run_response,
@@ -1608,19 +1632,14 @@ class Team:
             ):
                 yield event
 
-            run_response.status = RunStatus.completed
-
-            # 7. Add the run to memory
-            session.upsert_run(run_response=run_response)
-
-            # 8. Calculate session metrics
+            # 7. Calculate session metrics
             self._update_session_metrics(session=session)
 
             completed_event = self._handle_event(
                 create_team_run_completed_event(from_run_response=run_response), run_response, workflow_context
             )
 
-            # 9. Save session to storage
+            # 8. Save session to storage
             self.save_session(session=session)
 
             if stream_intermediate_steps:
@@ -1744,13 +1763,17 @@ class Team:
         # Initialize Team
         self.initialize_team(debug_mode=debug_mode)
 
-        image_artifacts, video_artifacts, audio_artifacts = self._validate_media_object_id(
-            images=images, videos=videos, audios=audio
+        image_artifacts, video_artifacts, audio_artifacts, file_artifacts = self._validate_media_object_id(
+            images=images, videos=videos, audios=audio, files=files
         )
 
         # Create RunInput to capture the original user input
         run_input = TeamRunInput(
-            input_content=input, images=image_artifacts, videos=video_artifacts, audios=audio_artifacts, files=files
+            input_content=input,
+            images=image_artifacts,
+            videos=video_artifacts,
+            audios=audio_artifacts,
+            files=file_artifacts,
         )
 
         team_session = self._read_or_create_session(session_id=session_id, user_id=user_id)
@@ -1844,6 +1867,8 @@ class Team:
             workflow_context=workflow_context,
             debug_mode=debug_mode,
             add_history_to_context=add_history_to_context,
+            add_dependencies_to_context=add_dependencies_to_context,
+            add_session_state_to_context=add_session_state_to_context,
             dependencies=dependencies,
             metadata=metadata,
         )
@@ -1968,6 +1993,10 @@ class Team:
             for audio in model_response.audios:
                 self._add_audio(audio, run_response)  # Generated audio go to run_response.audio
 
+        if model_response.files is not None:
+            for file in model_response.files:
+                self._add_file(file, run_response)  # Generated files go to run_response.files
+
     def _update_run_response(
         self, model_response: ModelResponse, run_response: TeamRunOutput, run_messages: RunMessages
     ):
@@ -1990,7 +2019,9 @@ class Team:
                 run_response.reasoning_content = model_response.reasoning_content
             else:
                 run_response.reasoning_content += model_response.reasoning_content
-
+        # Update provider data
+        if model_response.provider_data is not None:
+            run_response.model_provider_data = model_response.provider_data
         # Update citations
         if model_response.citations is not None:
             run_response.citations = model_response.citations
@@ -2054,6 +2085,7 @@ class Team:
             tool_choice=self.tool_choice,
             tool_call_limit=self.tool_call_limit,
             stream_model_response=stream_model_response,
+            send_media_to_model=self.send_media_to_model,
         ):
             yield from self._handle_model_response_chunk(
                 session=session,
@@ -2076,6 +2108,8 @@ class Team:
             run_response.response_audio = full_model_response.audio
         if full_model_response.citations is not None:
             run_response.citations = full_model_response.citations
+        if full_model_response.provider_data is not None:
+            run_response.model_provider_data = full_model_response.provider_data
 
         if stream_intermediate_steps and reasoning_state["reasoning_started"]:
             all_reasoning_steps: List[ReasoningStep] = []
@@ -2134,6 +2168,7 @@ class Team:
             tool_choice=self.tool_choice,
             tool_call_limit=self.tool_call_limit,
             stream_model_response=stream_model_response,
+            send_media_to_model=self.send_media_to_model,
         )  # type: ignore
         async for model_response_event in model_stream:
             for event in self._handle_model_response_chunk(
@@ -2163,6 +2198,8 @@ class Team:
             run_response.response_audio = full_model_response.audio
         if full_model_response.citations is not None:
             run_response.citations = full_model_response.citations
+        if full_model_response.provider_data is not None:
+            run_response.model_provider_data = full_model_response.provider_data
 
         # Build a list of messages that should be added to the RunOutput
         messages_for_run_response = [m for m in run_messages.messages if m.add_to_agent_memory]
@@ -2238,6 +2275,11 @@ class Team:
                     elif isinstance(model_response_event.content, str):
                         full_model_response.content = (full_model_response.content or "") + model_response_event.content
                     should_yield = True
+                elif (
+                    model_response_event.reasoning_content is not None
+                    or model_response_event.redacted_reasoning_content is not None
+                ):
+                    should_yield = True
 
                 # Process thinking
                 if model_response_event.audio is not None:
@@ -2302,6 +2344,7 @@ class Team:
                                 redacted_reasoning_content=model_response_event.redacted_reasoning_content,
                                 response_audio=full_model_response.audio,
                                 citations=model_response_event.citations,
+                                model_provider_data=model_response_event.provider_data,
                                 image=model_response_event.images[-1] if model_response_event.images else None,
                             ),
                             run_response,
@@ -2893,11 +2936,6 @@ class Team:
         session_id: Optional[str] = None,
         session_state: Optional[Dict[str, Any]] = None,
         user_id: Optional[str] = None,
-        show_message: bool = True,
-        show_reasoning: bool = True,
-        show_full_reasoning: bool = False,
-        console: Optional[Any] = None,
-        tags_to_include_in_markdown: Optional[Set[str]] = None,
         audio: Optional[Sequence[Audio]] = None,
         images: Optional[Sequence[Image]] = None,
         videos: Optional[Sequence[Video]] = None,
@@ -2905,9 +2943,16 @@ class Team:
         markdown: Optional[bool] = None,
         knowledge_filters: Optional[Dict[str, Any]] = None,
         add_history_to_context: Optional[bool] = None,
+        add_dependencies_to_context: Optional[bool] = None,
+        add_session_state_to_context: Optional[bool] = None,
         dependencies: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         debug_mode: Optional[bool] = None,
+        show_message: bool = True,
+        show_reasoning: bool = True,
+        show_full_reasoning: bool = False,
+        console: Optional[Any] = None,
+        tags_to_include_in_markdown: Optional[Set[str]] = None,
         **kwargs: Any,
     ) -> None:
         if not tags_to_include_in_markdown:
@@ -2946,6 +2991,8 @@ class Team:
                 knowledge_filters=knowledge_filters,
                 add_history_to_context=add_history_to_context,
                 dependencies=dependencies,
+                add_dependencies_to_context=add_dependencies_to_context,
+                add_session_state_to_context=add_session_state_to_context,
                 metadata=metadata,
                 debug_mode=debug_mode,
                 **kwargs,
@@ -2970,6 +3017,8 @@ class Team:
                 knowledge_filters=knowledge_filters,
                 add_history_to_context=add_history_to_context,
                 dependencies=dependencies,
+                add_dependencies_to_context=add_dependencies_to_context,
+                add_session_state_to_context=add_session_state_to_context,
                 metadata=metadata,
                 debug_mode=debug_mode,
                 **kwargs,
@@ -2984,11 +3033,6 @@ class Team:
         session_id: Optional[str] = None,
         session_state: Optional[Dict[str, Any]] = None,
         user_id: Optional[str] = None,
-        show_message: bool = True,
-        show_reasoning: bool = True,
-        show_full_reasoning: bool = False,
-        console: Optional[Any] = None,
-        tags_to_include_in_markdown: Optional[Set[str]] = None,
         audio: Optional[Sequence[Audio]] = None,
         images: Optional[Sequence[Image]] = None,
         videos: Optional[Sequence[Video]] = None,
@@ -2997,8 +3041,15 @@ class Team:
         knowledge_filters: Optional[Dict[str, Any]] = None,
         add_history_to_context: Optional[bool] = None,
         dependencies: Optional[Dict[str, Any]] = None,
+        add_dependencies_to_context: Optional[bool] = None,
+        add_session_state_to_context: Optional[bool] = None,
         metadata: Optional[Dict[str, Any]] = None,
         debug_mode: Optional[bool] = None,
+        show_message: bool = True,
+        show_reasoning: bool = True,
+        show_full_reasoning: bool = False,
+        console: Optional[Any] = None,
+        tags_to_include_in_markdown: Optional[Set[str]] = None,
         **kwargs: Any,
     ) -> None:
         if not tags_to_include_in_markdown:
@@ -3037,6 +3088,8 @@ class Team:
                 knowledge_filters=knowledge_filters,
                 add_history_to_context=add_history_to_context,
                 dependencies=dependencies,
+                add_dependencies_to_context=add_dependencies_to_context,
+                add_session_state_to_context=add_session_state_to_context,
                 metadata=metadata,
                 debug_mode=debug_mode,
                 **kwargs,
@@ -3061,6 +3114,8 @@ class Team:
                 knowledge_filters=knowledge_filters,
                 add_history_to_context=add_history_to_context,
                 dependencies=dependencies,
+                add_dependencies_to_context=add_dependencies_to_context,
+                add_session_state_to_context=add_session_state_to_context,
                 metadata=metadata,
                 debug_mode=debug_mode,
                 **kwargs,
@@ -3123,6 +3178,7 @@ class Team:
         images: Optional[Sequence[Image]] = None,
         videos: Optional[Sequence[Video]] = None,
         audios: Optional[Sequence[Audio]] = None,
+        files: Optional[Sequence[File]] = None,
     ) -> tuple:
         image_list = None
         if images:
@@ -3154,7 +3210,17 @@ class Team:
                     aud.id = str(uuid4())
                 audio_list.append(aud)
 
-        return image_list, video_list, audio_list
+        file_list = None
+        if files:
+            file_list = []
+            for file in files:
+                if not file.id:
+                    from uuid import uuid4
+
+                    file.id = str(uuid4())
+                file_list.append(file)
+
+        return image_list, video_list, audio_list, file_list
 
     def cli_app(
         self,
@@ -3449,6 +3515,7 @@ class Team:
                     reasoning_model=reasoning_model,
                     min_steps=self.reasoning_min_steps,
                     max_steps=self.reasoning_max_steps,
+                    tool_call_limit=self.tool_call_limit,
                     telemetry=self.telemetry,
                     debug_mode=self.debug_mode,
                     debug_level=self.debug_level,
@@ -3976,6 +4043,7 @@ class Team:
         add_history_to_context: Optional[bool] = None,
         dependencies: Optional[Dict[str, Any]] = None,
         add_dependencies_to_context: Optional[bool] = None,
+        add_session_state_to_context: Optional[bool] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         # Prepare tools
@@ -4055,9 +4123,13 @@ class Team:
             audio=audio,  # type: ignore
             files=files,  # type: ignore
             knowledge_filters=knowledge_filters,
-            workflow_context=workflow_context,
-            debug_mode=debug_mode,
             add_history_to_context=add_history_to_context,
+            workflow_context=workflow_context,
+            dependencies=dependencies,
+            add_dependencies_to_context=add_dependencies_to_context,
+            add_session_state_to_context=add_session_state_to_context,
+            metadata=metadata,
+            debug_mode=debug_mode,
         )
 
         _tools.append(delegate_task_func)
@@ -4091,6 +4163,7 @@ class Team:
                     if name not in self._functions_for_model:
                         func._team = self
                         func._session_state = session_state
+                        func._dependencies = dependencies
                         func.process_entrypoint(strict=strict)
                         if strict:
                             func.strict = True
@@ -4110,6 +4183,7 @@ class Team:
                 if tool.name not in self._functions_for_model:
                     tool._team = self
                     tool._session_state = session_state
+                    tool._dependencies = dependencies
                     tool.process_entrypoint(strict=strict)
                     if strict and tool.strict is None:
                         tool.strict = True
@@ -4131,6 +4205,7 @@ class Team:
                     func = Function.from_callable(tool, strict=strict)
                     func._team = self
                     func._session_state = session_state
+                    func._dependencies = dependencies
                     if strict:
                         func.strict = True
                     if self.tool_hooks:
@@ -4477,7 +4552,7 @@ class Team:
                 f"<additional_context>\n{self.additional_context.strip()}\n</additional_context>\n\n"
             )
 
-        if self.add_session_state_to_context and session_state is not None:
+        if add_session_state_to_context and session_state is not None:
             system_message_content += self._get_formatted_session_state_for_system_message(session_state)
 
         # Add the JSON output prompt if output_schema is provided and structured_outputs is False
@@ -4578,9 +4653,16 @@ class Team:
         if add_history_to_context:
             from copy import deepcopy
 
+            # Only skip messages from history when system_message_role is NOT a standard conversation role.
+            # Standard conversation roles ("user", "assistant", "tool") should never be filtered
+            # to preserve conversation continuity.
+            skip_role = (
+                self.system_message_role if self.system_message_role not in ["user", "assistant", "tool"] else None
+            )
+
             history = session.get_messages_from_last_n_runs(
                 last_n=self.num_history_runs,
-                skip_role=self.system_message_role,
+                skip_role=skip_role,
                 team_id=self.id,
             )
 
@@ -4664,6 +4746,9 @@ class Team:
                 if len(input_message) > 0 and isinstance(input_message[0], dict) and "type" in input_message[0]:
                     # This is multimodal content (text + images/audio/video), preserve the structure
                     input_content = input_message
+                elif len(input_message) > 0 and isinstance(input_message[0], Message):
+                    # This is a list of Message objects, extract text content from them
+                    input_content = get_text_from_message(input_message)
                 elif all(isinstance(item, str) for item in input_message):
                     input_content = "\n".join([str(item) for item in input_message])
                 else:
@@ -5061,20 +5146,19 @@ class Team:
             import json
 
             history: List[Dict[str, Any]] = []
-            if session is not None:
-                all_chats = self.get_messages_for_session(session_id=session.session_id)
 
-                if len(all_chats) == 0:
-                    return ""
+            all_chats = session.get_messages_from_last_n_runs(
+                team_id=self.id,
+            )
 
-                for chat in all_chats[::-1]:  # type: ignore
-                    history.insert(0, chat.to_dict())  # type: ignore
-
-                if num_chats is not None:
-                    history = history[:num_chats]
-
-            else:
+            if len(all_chats) == 0:
                 return ""
+
+            for chat in all_chats[::-1]:  # type: ignore
+                history.insert(0, chat.to_dict())  # type: ignore
+
+            if num_chats is not None:
+                history = history[:num_chats]
 
             return json.dumps(history)
 
@@ -5102,9 +5186,14 @@ class Team:
         member_agent_id = member_agent.id if isinstance(member_agent, Agent) else None
         member_team_id = member_agent.id if isinstance(member_agent, Team) else None
 
+        # Only skip messages from history when system_message_role is NOT a standard conversation role.
+        # Standard conversation roles ("user", "assistant", "tool") should never be filtered
+        # to preserve conversation continuity.
+        skip_role = self.system_message_role if self.system_message_role not in ["user", "assistant", "tool"] else None
+
         history = session.get_messages_from_last_n_runs(
             last_n=member_agent.num_history_runs or self.num_history_runs,
-            skip_role=self.system_message_role,
+            skip_role=skip_role,
             agent_id=member_agent_id,
             team_id=member_team_id,
             member_runs=True,
@@ -5178,9 +5267,13 @@ class Team:
         audio: Optional[List[Audio]] = None,
         files: Optional[List[File]] = None,
         knowledge_filters: Optional[Dict[str, Any]] = None,
-        workflow_context: Optional[Dict] = None,
-        debug_mode: Optional[bool] = None,
         add_history_to_context: Optional[bool] = None,
+        workflow_context: Optional[Dict] = None,
+        dependencies: Optional[Dict[str, Any]] = None,
+        add_dependencies_to_context: Optional[bool] = None,
+        add_session_state_to_context: Optional[bool] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        debug_mode: Optional[bool] = None,
     ) -> Function:
         if not images:
             images = []
@@ -5216,9 +5309,9 @@ class Team:
                     task_description, expected_output, team_member_interactions_str
                 )
 
-            # 4. Add history for the member if enabled
+            # 4. Add history for the member if enabled (because we won't load the session for the member, so history won't be loaded automatically)
             history = None
-            if member_agent.add_history_to_context:
+            if member_agent.add_history_to_context or add_history_to_context:
                 history = self._get_history_for_member_agent(session, member_agent)
                 if history:
                     if isinstance(member_agent_task, str):
@@ -5330,8 +5423,11 @@ class Team:
                     stream=True,
                     stream_intermediate_steps=stream_intermediate_steps,
                     debug_mode=debug_mode,
-                    add_history_to_context=add_history_to_context,
                     workflow_context=workflow_context,
+                    dependencies=dependencies,
+                    add_dependencies_to_context=add_dependencies_to_context,
+                    metadata=metadata,
+                    add_session_state_to_context=add_session_state_to_context,
                     knowledge_filters=knowledge_filters
                     if not member_agent.knowledge_filters and member_agent.knowledge
                     else None,
@@ -5365,7 +5461,10 @@ class Team:
                     stream=False,
                     debug_mode=debug_mode,
                     workflow_context=workflow_context,
-                    add_history_to_context=add_history_to_context,
+                    dependencies=dependencies,
+                    add_dependencies_to_context=add_dependencies_to_context,
+                    add_session_state_to_context=add_session_state_to_context,
+                    metadata=metadata,
                     knowledge_filters=knowledge_filters
                     if not member_agent.knowledge_filters and member_agent.knowledge
                     else None,
@@ -5449,7 +5548,10 @@ class Team:
                     stream=True,
                     stream_intermediate_steps=stream_intermediate_steps,
                     debug_mode=debug_mode,
-                    add_history_to_context=add_history_to_context,
+                    dependencies=dependencies,
+                    add_dependencies_to_context=add_dependencies_to_context,
+                    add_session_state_to_context=add_session_state_to_context,
+                    metadata=metadata,
                     workflow_context=workflow_context,
                     knowledge_filters=knowledge_filters
                     if not member_agent.knowledge_filters and member_agent.knowledge
@@ -5484,7 +5586,10 @@ class Team:
                     stream=False,
                     debug_mode=debug_mode,
                     workflow_context=workflow_context,
-                    add_history_to_context=add_history_to_context,
+                    dependencies=dependencies,
+                    add_dependencies_to_context=add_dependencies_to_context,
+                    add_session_state_to_context=add_session_state_to_context,
+                    metadata=metadata,
                     knowledge_filters=knowledge_filters
                     if not member_agent.knowledge_filters and member_agent.knowledge
                     else None,
@@ -5562,7 +5667,10 @@ class Team:
                         if not member_agent.knowledge_filters and member_agent.knowledge
                         else None,
                         debug_mode=debug_mode,
-                        add_history_to_context=add_history_to_context,
+                        dependencies=dependencies,
+                        add_dependencies_to_context=add_dependencies_to_context,
+                        add_session_state_to_context=add_session_state_to_context,
+                        metadata=metadata,
                         yield_run_response=True,
                     )
                     member_agent_run_response = None
@@ -5597,7 +5705,10 @@ class Team:
                         if not member_agent.knowledge_filters and member_agent.knowledge
                         else None,
                         debug_mode=debug_mode,
-                        add_history_to_context=add_history_to_context,
+                        dependencies=dependencies,
+                        add_dependencies_to_context=add_dependencies_to_context,
+                        add_session_state_to_context=add_session_state_to_context,
+                        metadata=metadata,
                     )
 
                     check_if_run_cancelled(member_agent_run_response)  # type: ignore
@@ -5671,7 +5782,10 @@ class Team:
                         knowledge_filters=knowledge_filters
                         if not member_agent.knowledge_filters and member_agent.knowledge
                         else None,
-                        add_history_to_context=add_history_to_context,
+                        dependencies=dependencies,
+                        add_dependencies_to_context=add_dependencies_to_context,
+                        add_session_state_to_context=add_session_state_to_context,
+                        metadata=metadata,
                         yield_run_response=True,
                     )
                     member_agent_run_response = None
@@ -5688,7 +5802,7 @@ class Team:
                         _process_delegate_task_to_member(
                             member_agent_run_response, member_agent, member_agent_task, member_session_state_copy
                         )
-
+                    await queue.put(done_marker)
                 # Initialize and launch all members
                 tasks: List[asyncio.Task[None]] = []
                 for member_agent_index, member_agent in enumerate(self.members):
@@ -5715,7 +5829,6 @@ class Team:
                     for t in tasks:
                         with contextlib.suppress(Exception):
                             await t
-
             else:
                 # Non-streaming concurrent run of members; collect results when done
                 tasks = []
@@ -5745,7 +5858,10 @@ class Team:
                             knowledge_filters=knowledge_filters
                             if not member_agent.knowledge_filters and member_agent.knowledge
                             else None,
-                            add_history_to_context=add_history_to_context,
+                            dependencies=dependencies,
+                            add_dependencies_to_context=add_dependencies_to_context,
+                            add_session_state_to_context=add_session_state_to_context,
+                            metadata=metadata,
                         )
                         check_if_run_cancelled(member_agent_run_response)
 
@@ -5978,7 +6094,8 @@ class Team:
 
         from agno.utils.merge_dict import merge_dictionaries
 
-        # Get the session_state from the database and update the current session_state
+        # Get the session_state from the database and merge with proper precedence
+        # At this point session_state contains: agent_defaults + run_params
         if session.session_data is not None and "session_state" in session.session_data:
             session_state_from_db = session.session_data.get("session_state")
 
@@ -5987,10 +6104,11 @@ class Team:
                 and isinstance(session_state_from_db, dict)
                 and len(session_state_from_db) > 0
             ):
-                # This updates session_state_from_db
-                # If there are conflicting keys, values from provided session_state will take precedence
-                merge_dictionaries(session_state_from_db, session_state)
-                session_state = session_state_from_db
+                # This preserves precedence: run_params > db_state > agent_defaults
+                merged_state = session_state_from_db.copy()
+                merge_dictionaries(merged_state, session_state)
+                session_state.clear()
+                session_state.update(merged_state)
 
         # Update the session_state in the session
         if session.session_data is not None:
@@ -6263,6 +6381,13 @@ class Team:
         if run_response.audio is None:
             run_response.audio = []
         run_response.audio.append(audio)
+
+    def _add_file(self, file: File, run_response: TeamRunOutput) -> None:
+        """Add file to both the agent's stateful storage and the current run response"""
+        # Add to run response
+        if run_response.files is None:
+            run_response.files = []
+        run_response.files.append(file)
 
     def _update_reasoning_content_from_tool_call(
         self, run_response: TeamRunOutput, tool_name: str, tool_args: Dict[str, Any]
@@ -6621,17 +6746,18 @@ class Team:
     ) -> Function:
         """Factory function to create a search_knowledge_base function with filters."""
 
-        def search_knowledge_base(query: str, filters: Optional[Dict[str, Any]] = None) -> str:
+        def search_knowledge_base(query: str, filters: Optional[List[KnowledgeFilter]] = None) -> str:
             """Use this function to search the knowledge base for information about a query.
 
             Args:
                 query: The query to search for.
-                filters: The filters to apply to the search. This is a dictionary of key-value pairs.
+                filters (optional): The filters to apply to the search. This is a list of KnowledgeFilter objects.
 
             Returns:
                 str: A string containing the response from the knowledge base.
             """
-            search_filters = get_agentic_or_user_search_filters(filters, knowledge_filters)
+            filters_dict = {filt.key: filt.value for filt in filters} if filters else None
+            search_filters = get_agentic_or_user_search_filters(filters_dict, knowledge_filters)
 
             # Get the relevant documents from the knowledge base, passing filters
             retrieval_timer = Timer()
@@ -6652,17 +6778,18 @@ class Team:
                 return "No documents found"
             return self._convert_documents_to_string(docs_from_knowledge)
 
-        async def asearch_knowledge_base(query: str, filters: Optional[Dict[str, Any]] = None) -> str:
+        async def asearch_knowledge_base(query: str, filters: Optional[List[KnowledgeFilter]] = None) -> str:
             """Use this function to search the knowledge base for information about a query asynchronously.
 
             Args:
                 query: The query to search for.
-                filters: The filters to apply to the search. This is a dictionary of key-value pairs.
+                filters (optional): The filters to apply to the search. This is a list of KnowledgeFilter objects.
 
             Returns:
                 str: A string containing the response from the knowledge base.
             """
-            search_filters = get_agentic_or_user_search_filters(filters, knowledge_filters)
+            filters_dict = {filt.key: filt.value for filt in filters} if filters else None
+            search_filters = get_agentic_or_user_search_filters(filters_dict, knowledge_filters)
 
             retrieval_timer = Timer()
             retrieval_timer.start()
