@@ -7,7 +7,7 @@ from agno.utils.log import logger
 from agno.tools.mcp import MCPTools
 
 try:
-    from toolbox_core import ToolboxClient
+    from toolbox_core import ToolboxClient # type: ignore
 except ImportError:
     raise ImportError("`toolbox_core` not installed. Please install using `pip install -U toolbox-core`.")
 
