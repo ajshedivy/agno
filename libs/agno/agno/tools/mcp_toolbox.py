@@ -49,8 +49,11 @@ class MCPToolbox(MCPTools, metaclass=MCPToolsMeta):
 
         """
 
-        # Transform URL for MCP server endpoint
-        super().__init__(url=url + "/mcp", transport=transport, **kwargs)
+        # Ensure the URL ends in "/mcp" as expected
+        if not url.endswith("/mcp"):
+            url = url + "/mcp"
+            
+       super().__init__(url=url, transport=transport, **kwargs)
 
         self.name = "toolbox_client"
         self.toolbox_url = url
