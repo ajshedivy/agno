@@ -53,7 +53,7 @@ class MCPToolbox(MCPTools, metaclass=MCPToolsMeta):
         if not url.endswith("/mcp"):
             url = url + "/mcp"
             
-       super().__init__(url=url, transport=transport, **kwargs)
+        super().__init__(url=url, transport=transport, **kwargs)
 
         self.name = "toolbox_client"
         self.toolbox_url = url
