@@ -79,7 +79,7 @@ async def run_workflow_demo():
         # Execute workflow
         result = await workflow.arun(user_request)
 
-        print(f"\n✅ Workflow Result:")
+        print("\n✅ Workflow Result:")
         print(f"Content: {result.content}")
         print(f"Steps executed: {len(result.step_results)}")
 
