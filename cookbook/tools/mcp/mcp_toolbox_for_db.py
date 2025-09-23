@@ -1,6 +1,4 @@
-"""
-Simple test script that connects to the MCP toolbox server
-"""
+"""Example code showcasing how to connect to the MCP toolbox server using the MCPToolbox Toolkit"""
 
 import asyncio
 from textwrap import dedent
