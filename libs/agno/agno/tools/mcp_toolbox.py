@@ -4,7 +4,7 @@ from warnings import warn
 from agno.tools.function import Function
 from agno.utils.log import logger
 
-from .mcp import MCPTools
+from agno.mcp import MCPTools
 
 try:
     from toolbox_core import ToolboxClient
