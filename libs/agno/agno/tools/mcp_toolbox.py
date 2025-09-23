@@ -47,11 +47,7 @@ class MCPToolbox(MCPTools, metaclass=MCPToolsMeta):
             headers (Optional[Dict[str, Any]], optional): Headers for toolbox-core client requests. Defaults to None.
             transport (Literal["stdio", "sse", "streamable-http"], optional): MCP transport protocol. Defaults to "streamable-http".
 
-        Raises:
-            ValueError: If url is None or if both toolsets and tool_name are specified
         """
-        if url is None:
-            raise ValueError("url parameter is required for MCPToolbox")
 
         # Transform URL for MCP server endpoint
         super().__init__(url=url + "/mcp", transport=transport, **kwargs)
