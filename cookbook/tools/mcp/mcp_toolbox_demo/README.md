@@ -14,7 +14,7 @@ Read more about the MCP Toolbox confiuration here: [MCP Toolbox Configuration](h
 
 - Docker or Podman installed on your system
 - Docker Compose support
-- Python 3.8+ with `uv` package manager
+- Python >= 3.13 with `uv` package manager
 
 ## Project Overview
 
