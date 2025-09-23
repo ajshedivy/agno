@@ -9,7 +9,7 @@ from agno.mcp import MCPTools
 try:
     from toolbox_core import ToolboxClient
 except ImportError:
-    raise ImportError("`toolbox_core` not installed. Please install using `pip install toolbox-core`.")
+    raise ImportError("`toolbox_core` not installed. Please install using `pip install -U toolbox-core`.")
 
 class MCPToolsMeta(type):
     """Metaclass for MCPTools to ensure proper initialization with AgentOS"""
