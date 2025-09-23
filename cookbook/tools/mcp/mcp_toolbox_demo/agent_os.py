@@ -1,4 +1,3 @@
-import asyncio
 from textwrap import dedent
 
 from agno.agent import Agent
