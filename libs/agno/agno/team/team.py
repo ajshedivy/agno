@@ -2037,9 +2037,6 @@ class Team:
         if model_response.audio is not None:
             run_response.response_audio = model_response.audio
 
-        # Update the run_response created_at with the model response created_at
-        run_response.created_at = model_response.created_at
-
         # Build a list of messages that should be added to the RunOutput
         messages_for_run_response = [m for m in run_messages.messages if m.add_to_agent_memory]
 
@@ -2099,7 +2096,6 @@ class Team:
             )
 
         # 3. Update TeamRunOutput
-        run_response.created_at = full_model_response.created_at
         if full_model_response.content is not None:
             run_response.content = full_model_response.content
         if full_model_response.reasoning_content is not None:
@@ -2189,7 +2185,6 @@ class Team:
             run_response.content = full_model_response.parsed
 
         # Update TeamRunOutput
-        run_response.created_at = full_model_response.created_at
         if full_model_response.content is not None:
             run_response.content = full_model_response.content
         if full_model_response.reasoning_content is not None:
@@ -2851,7 +2846,6 @@ class Team:
 
         # Update the TeamRunResponse content
         run_response.content = model_response.content
-        run_response.created_at = model_response.created_at
 
         if stream_intermediate_steps:
             yield self._handle_event(create_team_output_model_response_completed_event(run_response), run_response)
@@ -2909,7 +2903,6 @@ class Team:
 
         # Update the TeamRunResponse content
         run_response.content = model_response.content
-        run_response.created_at = model_response.created_at
 
         if stream_intermediate_steps:
             yield self._handle_event(create_team_output_model_response_completed_event(run_response), run_response)
@@ -4277,7 +4270,7 @@ class Team:
                     system_message_content += f"{indent * ' '}   - Name: {member.name}\n"
                 if member.role is not None:
                     system_message_content += f"{indent * ' '}   - Role: {member.role}\n"
-                if member.tools is not None and self.add_member_tools_to_context:
+                if member.tools and self.add_member_tools_to_context:
                     system_message_content += f"{indent * ' '}   - Member tools:\n"
                     for _tool in member.tools:
                         if isinstance(_tool, Toolkit):
