@@ -8,20 +8,17 @@ which is used by the `deepagents` package for async subagent communication.
 import asyncio
 import copy
 import json
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.routing import APIRouter
-from typing_extensions import List
 
 from agno.agent import Agent, RemoteAgent
 from agno.os.interfaces.agent_protocol.utils import (
     agent_to_ap_info,
     extract_messages_from_input,
-    new_id,
     now_iso,
     run_output_to_messages,
     team_to_ap_info,
@@ -457,11 +454,13 @@ def attach_routes(
                 pass
 
         thread = _threads.get(thread_id, {})
-        return JSONResponse(content={
-            "run": _runs.get(run_id, {}),
-            "values": thread.get("values", {}),
-            "messages": thread.get("values", {}).get("messages", []),
-        })
+        return JSONResponse(
+            content={
+                "run": _runs.get(run_id, {}),
+                "values": thread.get("values", {}),
+                "messages": thread.get("values", {}).get("messages", []),
+            }
+        )
 
     # =========================================================================
     # STATELESS RUNS
@@ -475,8 +474,8 @@ def attach_routes(
     async def create_run_wait(request: Request):
         """Create a stateless run and wait for the result."""
         body = await request.json()
-        assistant_id = body.get("agent_id") or body.get("assistant_id") or _get_default_assistant_id(
-            agents, teams, workflows
+        assistant_id = (
+            body.get("agent_id") or body.get("assistant_id") or _get_default_assistant_id(agents, teams, workflows)
         )
         if not assistant_id:
             raise HTTPException(status_code=400, detail="agent_id is required")
@@ -535,8 +534,8 @@ def attach_routes(
     async def create_run_stream(request: Request):
         """Create a stateless run and stream the output."""
         body = await request.json()
-        assistant_id = body.get("agent_id") or body.get("assistant_id") or _get_default_assistant_id(
-            agents, teams, workflows
+        assistant_id = (
+            body.get("agent_id") or body.get("assistant_id") or _get_default_assistant_id(agents, teams, workflows)
         )
         if not assistant_id:
             raise HTTPException(status_code=400, detail="agent_id is required")
@@ -644,8 +643,8 @@ def attach_routes(
     async def create_background_run(request: Request):
         """Create a stateless background run."""
         body = await request.json()
-        assistant_id = body.get("agent_id") or body.get("assistant_id") or _get_default_assistant_id(
-            agents, teams, workflows
+        assistant_id = (
+            body.get("agent_id") or body.get("assistant_id") or _get_default_assistant_id(agents, teams, workflows)
         )
         if not assistant_id:
             raise HTTPException(status_code=400, detail="agent_id is required")
@@ -710,11 +709,13 @@ def attach_routes(
 
         thread_id = run.get("thread_id", "")
         thread = _threads.get(thread_id, {})
-        return JSONResponse(content={
-            "run": _runs.get(run_id, {}),
-            "values": thread.get("values", {}),
-            "messages": thread.get("values", {}).get("messages", []),
-        })
+        return JSONResponse(
+            content={
+                "run": _runs.get(run_id, {}),
+                "values": thread.get("values", {}),
+                "messages": thread.get("values", {}).get("messages", []),
+            }
+        )
 
     @router.post(
         "/runs/{run_id}/cancel",
@@ -863,13 +864,15 @@ def attach_routes(
         if not runnable:
             raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
 
-        return JSONResponse(content={
-            "agent_id": agent_id,
-            "input_schema": input_schema,
-            "output_schema": output_schema,
-            "state_schema": None,
-            "config_schema": None,
-        })
+        return JSONResponse(
+            content={
+                "agent_id": agent_id,
+                "input_schema": input_schema,
+                "output_schema": output_schema,
+                "state_schema": None,
+                "config_schema": None,
+            }
+        )
 
     # =========================================================================
     # STORE
@@ -1110,10 +1113,12 @@ def attach_routes(
         )
 
         thread = _threads.get(thread_id, {})
-        return JSONResponse(content={
-            "run": _runs.get(run_id, {}),
-            "values": thread.get("values", {}),
-            "messages": thread.get("values", {}).get("messages", []),
-        })
+        return JSONResponse(
+            content={
+                "run": _runs.get(run_id, {}),
+                "values": thread.get("values", {}),
+                "messages": thread.get("values", {}).get("messages", []),
+            }
+        )
 
     return router

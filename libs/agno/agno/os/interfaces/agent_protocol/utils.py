@@ -1,6 +1,5 @@
 """Utility functions for mapping between Agent Protocol and Agno formats."""
 
-import asyncio
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
@@ -49,10 +48,12 @@ def run_output_to_messages(output: RunOutput) -> List[Dict[str, Any]]:
     """Convert Agno RunOutput to Agent Protocol message format."""
     messages: List[Dict[str, Any]] = []
     if output.content:
-        messages.append({
-            "type": "ai",
-            "content": output.content,
-        })
+        messages.append(
+            {
+                "type": "ai",
+                "content": output.content,
+            }
+        )
     return messages
 
 

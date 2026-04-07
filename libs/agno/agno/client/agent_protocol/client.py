@@ -7,10 +7,9 @@ Uses ap_client SDK for sync operations and httpx for async operations,
 with ap_client Pydantic models for serialization/deserialization.
 """
 
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
-from agno.utils.http import get_default_async_client, get_default_sync_client
-from agno.utils.log import log_warning
+from agno.utils.http import get_default_async_client
 
 try:
     from ap_client import (
@@ -39,9 +38,7 @@ try:
         ThreadCreate,
     )
 except ImportError as e:
-    raise ImportError(
-        "`ap_client` not installed. Please install it with `pip install ap-client`"
-    ) from e
+    raise ImportError("`ap_client` not installed. Please install it with `pip install ap-client`") from e
 
 
 __all__ = ["AgentProtocolClient"]
@@ -198,7 +195,7 @@ class AgentProtocolClient:
         webhook: Optional[str] = None,
     ) -> Run:
         """Create a background run."""
-        from ap_client.models import Config, Input
+        from ap_client.models import Input
 
         body = RunCreate(
             thread_id=thread_id,
