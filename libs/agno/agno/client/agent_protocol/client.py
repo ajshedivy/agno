@@ -78,6 +78,30 @@ class AgentProtocolClient:
         self._agents_api = AgentsApi(self._api_client)
         self._store_api = StoreApi(self._api_client)
 
+    @staticmethod
+    def _parse_run_wait_response(data: Dict[str, Any]) -> RunWaitResponse:
+        """Parse a RunWaitResponse from raw JSON, tolerating non-standard message formats.
+
+        The ap_client Message model requires strict role/content fields, but servers
+        (including Agno's AP interface) may return simplified message dicts. This method
+        builds the RunWaitResponse while gracefully handling such messages.
+        """
+        run_obj = Run.from_dict(data["run"]) if data.get("run") else None
+        values = data.get("values")
+
+        # Try parsing messages through ap_client; fall back to raw dicts on failure
+        parsed_messages = None
+        raw_messages = data.get("messages")
+        if raw_messages:
+            try:
+                parsed_messages = [Message.from_dict(m) for m in raw_messages]
+            except Exception:
+                # Messages don't conform to strict ap_client schema -- store as None
+                # The raw messages are still available via the values dict
+                parsed_messages = None
+
+        return RunWaitResponse(run=run_obj, values=values, messages=parsed_messages)
+
     # =========================================================================
     # Stateless Runs
     # =========================================================================
@@ -131,7 +155,7 @@ class AgentProtocolClient:
             timeout=self.timeout,
         )
         resp.raise_for_status()
-        return RunWaitResponse.from_dict(resp.json())  # type: ignore
+        return self._parse_run_wait_response(resp.json())
 
     def create_run_stream(
         self,
@@ -269,7 +293,7 @@ class AgentProtocolClient:
             timeout=self.timeout,
         )
         resp.raise_for_status()
-        return RunWaitResponse.from_dict(resp.json())  # type: ignore
+        return self._parse_run_wait_response(resp.json())
 
     def cancel_run(self, run_id: str) -> None:
         """Cancel a run."""
