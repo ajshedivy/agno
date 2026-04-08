@@ -18,9 +18,13 @@ Endpoints available at:
     POST http://localhost:7778/ap/runs/stream       - Stateless run (streaming)
 """
 
+from dotenv import load_dotenv
+
 from agno.agent.agent import Agent
-from agno.models.openai import OpenAIChat
+from agno.models.anthropic import Claude
 from agno.os import AgentOS
+
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Create Agents
@@ -28,7 +32,7 @@ from agno.os import AgentOS
 
 research_agent = Agent(
     name="research-agent",
-    model=OpenAIChat(id="gpt-4o"),
+    model=Claude(id="claude-sonnet-4-6"),
     id="research_agent",
     description="A research agent that investigates topics in depth and provides thorough, well-structured answers.",
     instructions=(
@@ -38,16 +42,18 @@ research_agent = Agent(
     ),
     add_datetime_to_context=True,
     markdown=True,
+    debug_mode=True,
 )
 
 assistant_agent = Agent(
     name="assistant-agent",
-    model=OpenAIChat(id="gpt-4o"),
+    model=Claude(id="claude-sonnet-4-6"),
     id="assistant_agent",
     description="A helpful AI assistant that provides concise, accurate answers.",
     instructions="You are a helpful AI assistant. Provide clear, concise answers.",
     add_datetime_to_context=True,
     markdown=True,
+    debug_mode=True,
 )
 
 # ---------------------------------------------------------------------------

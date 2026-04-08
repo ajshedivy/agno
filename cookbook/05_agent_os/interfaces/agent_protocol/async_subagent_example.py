@@ -19,15 +19,25 @@ Prerequisites:
 """
 
 import asyncio
+import uuid
 
 from deepagents import AsyncSubAgent, create_deep_agent
+from dotenv import load_dotenv
+from langgraph.checkpoint.memory import MemorySaver
+
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Create a Deep Agent with AsyncSubAgents
 # ---------------------------------------------------------------------------
 
+# MemorySaver persists conversation state (including async task tracking)
+# across turns so the supervisor remembers launched tasks.
+checkpointer = MemorySaver()
+
 agent = create_deep_agent(
     model="anthropic:claude-sonnet-4-6",
+    checkpointer=checkpointer,
     subagents=[
         AsyncSubAgent(
             name="researcher",
@@ -46,32 +56,48 @@ agent = create_deep_agent(
 
 
 # ---------------------------------------------------------------------------
-# Run Example
+# Interactive Chat
 # ---------------------------------------------------------------------------
 
 
 async def main():
-    """Demonstrate async subagent delegation."""
+    """Interactive chat loop with async subagent delegation."""
     print("=" * 60)
     print("Deep Agent with Async SubAgents")
     print("=" * 60)
     print()
-    print("This agent delegates tasks to remote Agno agents exposed")
-    print("via the Agent Protocol interface.")
+    print("Chat with a supervisor that delegates to remote Agno agents.")
+    print("Try: 'Research quantum computing' then 'Check the task'")
+    print("Type 'quit' to exit.")
     print()
 
-    # The deep agent will decide which subagent to delegate to
-    response = await agent.ainvoke(
-        {"messages": [{"role": "user", "content": "Research the latest breakthroughs in quantum computing in 2025."}]}
-    )
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
 
-    print("Response:")
-    messages = response.get("messages", [])
-    for msg in messages:
-        if hasattr(msg, "content"):
-            print(msg.content)
-        elif isinstance(msg, dict):
-            print(msg.get("content", ""))
+    while True:
+        try:
+            user_input = input("You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if not user_input or user_input.lower() in ("quit", "exit", "q"):
+            break
+
+        response = await agent.ainvoke(
+            {"messages": [{"role": "user", "content": user_input}]},
+            config=config,
+        )
+
+        # Print assistant messages
+        for msg in response.get("messages", []):
+            content = getattr(msg, "content", None) or (
+                msg.get("content") if isinstance(msg, dict) else None
+            )
+            role = getattr(msg, "type", None) or (
+                msg.get("role") if isinstance(msg, dict) else None
+            )
+            if role == "ai" and content and isinstance(content, str):
+                print(f"\nA: {content}\n")
 
 
 if __name__ == "__main__":
