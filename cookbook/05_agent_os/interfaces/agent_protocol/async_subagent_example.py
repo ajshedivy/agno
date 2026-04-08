@@ -22,10 +22,7 @@ import asyncio
 import uuid
 
 from deepagents import AsyncSubAgent, create_deep_agent
-from dotenv import load_dotenv
 from langgraph.checkpoint.memory import MemorySaver
-
-load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Create a Deep Agent with AsyncSubAgents

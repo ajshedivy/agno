@@ -18,13 +18,9 @@ Endpoints available at:
     POST http://localhost:7778/ap/runs/stream       - Stateless run (streaming)
 """
 
-from dotenv import load_dotenv
-
 from agno.agent.agent import Agent
 from agno.models.anthropic import Claude
 from agno.os import AgentOS
-
-load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Create Agents
