@@ -82,17 +82,17 @@ def _find_runnable(
 ) -> Optional[Union[Agent, RemoteAgent, Team, RemoteTeam, Workflow, RemoteWorkflow]]:
     """Find an agent, team, or workflow by assistant_id."""
     if agents:
-        result = get_agent_by_id(assistant_id, agents)
-        if result:
-            return result
+        agent_result = get_agent_by_id(assistant_id, agents)
+        if agent_result:
+            return agent_result
     if teams:
-        result = get_team_by_id(assistant_id, teams)
-        if result:
-            return result
+        team_result = get_team_by_id(assistant_id, teams)
+        if team_result:
+            return team_result
     if workflows:
-        result = get_workflow_by_id(assistant_id, workflows)
-        if result:
-            return result
+        workflow_result = get_workflow_by_id(assistant_id, workflows)
+        if workflow_result:
+            return workflow_result
     return None
 
 
@@ -129,34 +129,34 @@ async def _execute_agent_run(
             _threads[thread_id]["updated_at"] = now_iso()
 
         if isinstance(runnable, (Agent, RemoteAgent)):
-            response = await runnable.arun(
+            agent_response = await runnable.arun(
                 input=input_text,
                 session_id=session_id or thread_id,
                 stream=False,
             )
             # Store output in thread values
-            messages = run_output_to_messages(response)
+            messages = run_output_to_messages(agent_response)
             # Include the user input message too
             all_messages = [{"type": "human", "content": input_text}] + messages
         elif isinstance(runnable, (Team, RemoteTeam)):
-            response = await runnable.arun(
+            team_response = await runnable.arun(
                 input=input_text,
                 session_id=session_id or thread_id,
                 stream=False,
             )
             messages = []
-            if hasattr(response, "content") and response.content:
-                messages.append({"type": "ai", "content": response.content})
+            if hasattr(team_response, "content") and team_response.content:
+                messages.append({"type": "ai", "content": team_response.content})
             all_messages = [{"type": "human", "content": input_text}] + messages
         else:
             # Workflow
-            response = await runnable.arun(
+            workflow_response = await runnable.arun(
                 input=input_text,
                 session_id=session_id or thread_id,
             )
             messages = []
-            if hasattr(response, "content") and response.content:
-                messages.append({"type": "ai", "content": response.content})
+            if hasattr(workflow_response, "content") and workflow_response.content:
+                messages.append({"type": "ai", "content": workflow_response.content})
             all_messages = [{"type": "human", "content": input_text}] + messages
 
         # Update thread values with messages
