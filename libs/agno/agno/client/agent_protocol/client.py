@@ -38,7 +38,10 @@ try:
         ThreadCreate,
     )
 except ImportError as e:
-    raise ImportError("`ap_client` not installed. Please install it with `pip install ap-client`") from e
+    raise ImportError(
+        "`ap_client` not installed. Install from GitHub with:\n"
+        '  pip install "git+https://github.com/langchain-ai/agent-protocol.git#subdirectory=client-python"'
+    ) from e
 
 
 __all__ = ["AgentProtocolClient"]
@@ -221,7 +224,7 @@ class AgentProtocolClient:
         """Create a background run."""
         from ap_client.models import Input
 
-        body = RunCreate(
+        body = RunStream(
             thread_id=thread_id,
             agent_id=agent_id,
             input=Input.from_dict(input) if input else None,
@@ -282,7 +285,7 @@ class AgentProtocolClient:
 
     def wait_run(self, run_id: str) -> RunWaitResponse:
         """Wait for a run to complete."""
-        return self._bg_runs_api.wait_for_run(run_id)
+        return self._bg_runs_api.wait_run(run_id)
 
     async def await_run(self, run_id: str) -> RunWaitResponse:
         """Async: Wait for a run to complete."""

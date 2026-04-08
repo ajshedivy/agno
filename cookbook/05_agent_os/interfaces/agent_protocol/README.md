@@ -1,29 +1,48 @@
 # Agent Protocol Interface
 
-This cookbook demonstrates how to expose Agno agents via the [Agent Protocol](https://github.com/langchain-ai/agent-protocol) -- a framework-agnostic standard for serving LLM agents. Once exposed, any Agent Protocol client (including LangChain's `deepagents` package) can interact with your Agno agents.
+This cookbook demonstrates how to expose Agno agents via the [Agent Protocol](https://github.com/langchain-ai/agent-protocol) -- a framework-agnostic standard for serving LLM agents. Once exposed, any Agent Protocol client (including LangChain's `deepagents` package and the Agno `AgentProtocolClient`) can interact with your Agno agents.
 
 ## Examples
 
 | File | Description |
 |------|-------------|
-| `basic.py` | AgentOS server with Agent Protocol interface |
+| `server.py` | AgentOS server with Agent Protocol interface |
+| `client_example.py` | Agno `AgentProtocolClient` connecting to an AgentOS server |
 | `async_subagent_example.py` | End-to-end: deepagents AsyncSubAgent connecting to AgentOS |
 
 ## Prerequisites
 
-1. **AgentOS server** (basic.py):
-   ```bash
-   pip install agno
-   export OPENAI_API_KEY=your_key_here
-   python basic.py
-   ```
+### Install `ap_client` (Agent Protocol Python SDK)
 
-2. **deepagents client** (async_subagent_example.py):
-   ```bash
-   pip install deepagents
-   export ANTHROPIC_API_KEY=your_key_here
-   python async_subagent_example.py
-   ```
+The `ap_client` package is not on PyPI. Install directly from GitHub:
+
+```bash
+pip install "git+https://github.com/langchain-ai/agent-protocol.git#subdirectory=client-python"
+```
+
+### Run the server
+
+```bash
+pip install agno
+export ANTHROPIC_API_KEY=your_key_here
+python server.py
+```
+
+The server starts on `http://localhost:7778` with the Agent Protocol interface at `/ap`.
+
+### Run the Agno client example
+
+```bash
+python client_example.py
+```
+
+### Run the deepagents example
+
+```bash
+pip install deepagents
+export ANTHROPIC_API_KEY=your_key_here
+python async_subagent_example.py
+```
 
 ## How It Works
 
@@ -36,19 +55,22 @@ This cookbook demonstrates how to expose Agno agents via the [Agent Protocol](ht
    - `POST /ap/runs/stream` - Stateless run (streaming)
    - And more (store, thread CRUD, etc.)
 
-2. The `deepagents` package uses the LangGraph SDK to communicate with these endpoints, enabling async subagent delegation.
+2. The `AgentProtocolClient` wraps the `ap_client` SDK (sync) and httpx (async) for Agno-native consumption of any Agent Protocol server.
+
+3. The `deepagents` package uses the LangGraph SDK to communicate with these endpoints, enabling async subagent delegation.
 
 ## Architecture
 
 ```
-AgentOS (basic.py)                     deepagents (async_subagent_example.py)
-+---------------------------+          +----------------------------------+
-| Agent Protocol Interface  |  HTTP    | create_deep_agent()              |
-| /ap/threads              <----------+   AsyncSubAgent(                 |
-| /ap/threads/{id}/runs    |          |     url="http://localhost:7778/ap"|
-| /ap/agents/search        |          |     graph_id="research_agent"    |
-| /ap/runs/wait            |          |   )                              |
-+---------------------------+          +----------------------------------+
+AgentOS (server.py)                     Clients
++---------------------------+
+| Agent Protocol Interface  |  HTTP    AgentProtocolClient (client_example.py)
+| /ap/threads              <----------  client.acreate_run_wait(...)
+| /ap/threads/{id}/runs    |
+| /ap/agents/search        |  HTTP    deepagents (async_subagent_example.py)
+| /ap/runs/wait            <----------  AsyncSubAgent(url="...", graph_id="...")
+| /ap/store/items          |
++---------------------------+
 | Agno Agent               |
 | (research_agent)         |
 +---------------------------+

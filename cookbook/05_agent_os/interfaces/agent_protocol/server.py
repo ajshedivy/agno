@@ -6,7 +6,7 @@ Demonstrates exposing an Agno agent via the Agent Protocol interface.
 Any Agent Protocol client (including deepagents) can connect to this server.
 
 Run:
-    python basic.py
+    python server.py
 
 Endpoints available at:
     POST http://localhost:7778/ap/threads          - Create a thread
@@ -80,4 +80,4 @@ if __name__ == "__main__":
         curl -s http://localhost:7778/ap/runs/wait -X POST -H 'Content-Type: application/json' \\
             -d '{"agent_id":"research_agent","input":{"messages":[{"role":"user","content":"What is quantum computing?"}]}}'
     """
-    agent_os.serve(app="basic:app", reload=True, port=7778)
+    agent_os.serve(app="server:app", reload=True, port=7778)

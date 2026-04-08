@@ -7,7 +7,7 @@ server running the Agent Protocol interface.
 
 Prerequisites:
 1. Start the Agent Protocol server:
-   python cookbook/05_agent_os/interfaces/agent_protocol/basic.py
+   python cookbook/05_agent_os/interfaces/agent_protocol/server.py
 
    The server will run on http://localhost:7778
 
