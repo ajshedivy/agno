@@ -45,7 +45,7 @@ def get(agent_id: str = typer.Argument(help="Agent ID")) -> None:
     output_detail(
         data=data,
         fields=[
-            ("ID", "agent_id"),
+            ("ID", "id"),
             ("Name", "name"),
             ("Description", "description"),
             ("Model", "model"),
@@ -150,11 +150,13 @@ def _stream_run(client: Any, endpoint: str, form_data: dict) -> None:
         if output_json:
             events.append(event)
         else:
-            # Print content tokens as they arrive
-            content = event.get("content")
-            if content:
-                sys.stdout.write(content)
-                sys.stdout.flush()
+            # Only print content from RunContent events, skip RunCompleted which duplicates full output
+            event_type = event.get("event", "")
+            if event_type in ("RunContent", ""):
+                content = event.get("content")
+                if content:
+                    sys.stdout.write(content)
+                    sys.stdout.flush()
 
     if output_json:
         print_json(events)
@@ -169,18 +171,15 @@ def _print_run_output(data: dict) -> None:
     if content:
         print(content)
 
-    # Print metadata if available
-    messages = data.get("messages", [])
-    if messages:
-        last = messages[-1] if messages else {}
-        metrics = last.get("metrics", {})
-        if metrics:
-            tokens = metrics.get("total_tokens")
-            time_val = metrics.get("time")
-            parts = []
-            if tokens:
-                parts.append(f"tokens: {tokens}")
-            if time_val:
-                parts.append(f"time: {time_val:.2f}s")
-            if parts:
-                print(f"\n[{', '.join(parts)}]", file=sys.stderr)
+    # Print metrics summary to stderr
+    metrics = data.get("metrics", {})
+    if metrics:
+        parts = []
+        tokens = metrics.get("total_tokens")
+        duration = metrics.get("duration")
+        if tokens:
+            parts.append(f"tokens: {tokens}")
+        if duration:
+            parts.append(f"time: {duration:.2f}s")
+        if parts:
+            print(f"\n[{', '.join(parts)}]", file=sys.stderr)

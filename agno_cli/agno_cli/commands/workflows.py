@@ -45,7 +45,7 @@ def get(workflow_id: str = typer.Argument(help="Workflow ID")) -> None:
     output_detail(
         data=data,
         fields=[
-            ("ID", "workflow_id"),
+            ("ID", "id"),
             ("Name", "name"),
             ("Description", "description"),
         ],
@@ -81,10 +81,12 @@ def run(
                 if output_json:
                     events.append(event)
                 else:
-                    content = event.get("content")
-                    if content:
-                        sys.stdout.write(content)
-                        sys.stdout.flush()
+                    event_type = event.get("event", "")
+                    if event_type in ("RunContent", ""):
+                        content = event.get("content")
+                        if content:
+                            sys.stdout.write(content)
+                            sys.stdout.flush()
             if output_json:
                 print_json(events)
             else:
