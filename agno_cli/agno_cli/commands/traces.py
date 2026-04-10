@@ -26,7 +26,7 @@ def list_traces(
     page: int = typer.Option(1, "--page", "-p", help="Page number"),
 ) -> None:
     """List execution traces."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     params = {
@@ -41,7 +41,7 @@ def list_traces(
         "end_time": end_time,
         "page": page,
         "limit": limit,
-        "db_id": get_db_id(),
+        "db_id": resolve_db_id(),
     }
 
     try:
@@ -68,10 +68,10 @@ def get(
     run_id: Optional[str] = typer.Option(None, "--run-id", help="Run ID"),
 ) -> None:
     """Get trace details."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
-    params = {"span_id": span_id, "run_id": run_id, "db_id": get_db_id()}
+    params = {"span_id": span_id, "run_id": run_id, "db_id": resolve_db_id()}
 
     try:
         data = client.get(f"/traces/{trace_id}", params=params)
@@ -94,7 +94,7 @@ def stats(
     page: int = typer.Option(1, "--page", "-p", help="Page number"),
 ) -> None:
     """Get trace session stats."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     params = {
@@ -106,7 +106,7 @@ def stats(
         "end_time": end_time,
         "page": page,
         "limit": limit,
-        "db_id": get_db_id(),
+        "db_id": resolve_db_id(),
     }
 
     try:
@@ -134,7 +134,7 @@ def search(
     page: int = typer.Option(1, "--page", "-p", help="Page number"),
 ) -> None:
     """Search traces with filter expressions."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     body = {"page": page, "limit": limit}
@@ -143,7 +143,7 @@ def search(
     if group_by:
         body["group_by"] = group_by
 
-    params = {"db_id": get_db_id()} if get_db_id() else None
+    params = {"db_id": resolve_db_id()} if resolve_db_id() else None
 
     try:
         data = client.post("/traces/search", data=body, params=params)

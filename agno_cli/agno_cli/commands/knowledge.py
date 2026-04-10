@@ -30,7 +30,7 @@ def list_content(
     knowledge_id: Optional[str] = typer.Option(None, "--knowledge-id", help="Knowledge base ID"),
 ) -> None:
     """List knowledge content."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     params = {
@@ -38,7 +38,7 @@ def list_content(
         "page": page,
         "sort_by": sort_by,
         "sort_order": sort_order,
-        "db_id": get_db_id(),
+        "db_id": resolve_db_id(),
         "knowledge_id": knowledge_id,
     }
 
@@ -65,10 +65,10 @@ def get(
     knowledge_id: Optional[str] = typer.Option(None, "--knowledge-id", help="Knowledge base ID"),
 ) -> None:
     """Get knowledge content details."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
-    params = _knowledge_params(get_db_id(), knowledge_id)
+    params = _knowledge_params(resolve_db_id(), knowledge_id)
 
     try:
         data = client.get(f"/knowledge/content/{content_id}", params=params)
@@ -88,7 +88,7 @@ def upload(
     knowledge_id: Optional[str] = typer.Option(None, "--knowledge-id", help="Knowledge base ID"),
 ) -> None:
     """Upload a file to the knowledge base."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     content_name = name or file_path.name
@@ -100,7 +100,7 @@ def upload(
     if reader_id:
         form_data["reader_id"] = reader_id
 
-    db_id = get_db_id()
+    db_id = resolve_db_id()
     if db_id:
         form_data["db_id"] = db_id
     if knowledge_id:
@@ -133,7 +133,7 @@ def update(
     knowledge_id: Optional[str] = typer.Option(None, "--knowledge-id", help="Knowledge base ID"),
 ) -> None:
     """Update knowledge content metadata."""
-    from agno_cli.main import require_client
+    from agno_cli.main import require_client, resolve_db_id
 
     client = require_client()
     body = {}
@@ -145,7 +145,7 @@ def update(
         body["reader_id"] = reader_id
 
     try:
-        data = client.patch(f"/knowledge/content/{content_id}", data=body)
+        data = client.patch(f"/knowledge/content/{content_id}", data=body, params={"db_id": resolve_db_id()})
     except AgnoClientError as e:
         print_error(e.message)
         raise typer.Exit(1)
@@ -162,10 +162,10 @@ def delete(
     knowledge_id: Optional[str] = typer.Option(None, "--knowledge-id", help="Knowledge base ID"),
 ) -> None:
     """Delete knowledge content."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
-    params = _knowledge_params(get_db_id(), knowledge_id)
+    params = _knowledge_params(resolve_db_id(), knowledge_id)
 
     try:
         client.delete(f"/knowledge/content/{content_id}", params=params)
@@ -181,10 +181,10 @@ def delete_all(
     knowledge_id: Optional[str] = typer.Option(None, "--knowledge-id", help="Knowledge base ID"),
 ) -> None:
     """Delete all knowledge content."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
-    params = _knowledge_params(get_db_id(), knowledge_id)
+    params = _knowledge_params(resolve_db_id(), knowledge_id)
 
     try:
         data = client.delete("/knowledge/content", params=params)
@@ -201,10 +201,10 @@ def status(
     knowledge_id: Optional[str] = typer.Option(None, "--knowledge-id", help="Knowledge base ID"),
 ) -> None:
     """Check processing status of knowledge content."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
-    params = _knowledge_params(get_db_id(), knowledge_id)
+    params = _knowledge_params(resolve_db_id(), knowledge_id)
 
     try:
         data = client.get(f"/knowledge/content/{content_id}/status", params=params)
@@ -225,7 +225,7 @@ def search(
     knowledge_id: Optional[str] = typer.Option(None, "--knowledge-id", help="Knowledge base ID"),
 ) -> None:
     """Search knowledge base."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     body = {"query": query, "limit": limit, "page": page}
@@ -234,7 +234,7 @@ def search(
     if search_type:
         body["search_type"] = search_type
 
-    params = _knowledge_params(get_db_id(), knowledge_id)
+    params = _knowledge_params(resolve_db_id(), knowledge_id)
 
     try:
         data = client.post("/knowledge/search", data=body, params=params)
@@ -262,10 +262,10 @@ def get_config(
     knowledge_id: Optional[str] = typer.Option(None, "--knowledge-id", help="Knowledge base ID"),
 ) -> None:
     """Get knowledge base configuration."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
-    params = _knowledge_params(get_db_id(), knowledge_id)
+    params = _knowledge_params(resolve_db_id(), knowledge_id)
 
     try:
         data = client.get("/knowledge/config", params=params)

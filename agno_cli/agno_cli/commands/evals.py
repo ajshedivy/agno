@@ -24,7 +24,7 @@ def list_evals(
     sort_order: Optional[str] = typer.Option(None, "--sort-order", help="Sort order: asc, desc"),
 ) -> None:
     """List evaluation runs."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     params = {
@@ -37,7 +37,7 @@ def list_evals(
         "page": page,
         "sort_by": sort_by,
         "sort_order": sort_order,
-        "db_id": get_db_id(),
+        "db_id": resolve_db_id(),
     }
     if eval_types:
         params["eval_types"] = eval_types
@@ -62,10 +62,10 @@ def list_evals(
 @app.command()
 def get(eval_run_id: str = typer.Argument(help="Eval run ID")) -> None:
     """Get eval run details."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
-    params = {"db_id": get_db_id()} if get_db_id() else None
+    params = {"db_id": resolve_db_id()} if resolve_db_id() else None
 
     try:
         data = client.get(f"/eval-runs/{eval_run_id}", params=params)
@@ -81,11 +81,11 @@ def delete(
     ids: str = typer.Option(..., "--ids", help="Comma-separated eval run IDs to delete"),
 ) -> None:
     """Delete evaluation runs."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     body = {"eval_run_ids": ids.split(",")}
-    params = {"db_id": get_db_id()} if get_db_id() else None
+    params = {"db_id": resolve_db_id()} if resolve_db_id() else None
 
     try:
         client.delete("/eval-runs", data=body, params=params)
@@ -102,13 +102,13 @@ def update(
     name: str = typer.Option(..., "--name", help="New name for the eval run"),
 ) -> None:
     """Update an eval run."""
-    from agno_cli.main import require_client
+    from agno_cli.main import require_client, resolve_db_id
 
     client = require_client()
     body = {"name": name}
 
     try:
-        data = client.patch(f"/eval-runs/{eval_run_id}", data=body)
+        data = client.patch(f"/eval-runs/{eval_run_id}", data=body, params={"db_id": resolve_db_id()})
     except AgnoClientError as e:
         print_error(e.message)
         raise typer.Exit(1)

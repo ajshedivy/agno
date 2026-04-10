@@ -23,7 +23,7 @@ def list_sessions(
     sort_order: Optional[str] = typer.Option(None, "--sort-order", help="Sort order: asc, desc"),
 ) -> None:
     """List sessions."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     params = {
@@ -35,7 +35,7 @@ def list_sessions(
         "page": page,
         "sort_by": sort_by,
         "sort_order": sort_order,
-        "db_id": get_db_id(),
+        "db_id": resolve_db_id(),
     }
 
     try:
@@ -62,10 +62,10 @@ def get(
     user_id: Optional[str] = typer.Option(None, "--user-id", help="User ID"),
 ) -> None:
     """Get session details."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
-    params = {"session_type": session_type, "user_id": user_id, "db_id": get_db_id()}
+    params = {"session_type": session_type, "user_id": user_id, "db_id": resolve_db_id()}
 
     try:
         data = client.get(f"/sessions/{session_id}", params=params)
@@ -89,7 +89,7 @@ def create(
     metadata: Optional[str] = typer.Option(None, "--metadata", help="Metadata as JSON string"),
 ) -> None:
     """Create a new session."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     body = {"session_type": session_type}
@@ -110,7 +110,7 @@ def create(
     if metadata:
         body["metadata"] = json.loads(metadata)
 
-    db_id = get_db_id()
+    db_id = resolve_db_id()
     params = {"db_id": db_id} if db_id else None
 
     try:
@@ -137,7 +137,7 @@ def update(
     user_id: Optional[str] = typer.Option(None, "--user-id", help="User ID"),
 ) -> None:
     """Update a session."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     body = {}
@@ -150,7 +150,7 @@ def update(
     if summary:
         body["summary"] = json.loads(summary)
 
-    params = {"session_type": session_type, "user_id": user_id, "db_id": get_db_id()}
+    params = {"session_type": session_type, "user_id": user_id, "db_id": resolve_db_id()}
 
     try:
         data = client.patch(f"/sessions/{session_id}", data={"body": body, "params": params})
@@ -171,10 +171,10 @@ def delete(
     user_id: Optional[str] = typer.Option(None, "--user-id", help="User ID"),
 ) -> None:
     """Delete a session."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
-    params = {"session_type": session_type, "user_id": user_id, "db_id": get_db_id()}
+    params = {"session_type": session_type, "user_id": user_id, "db_id": resolve_db_id()}
 
     try:
         client.delete(f"/sessions/{session_id}", params=params)
@@ -192,13 +192,13 @@ def delete_all(
     component_ids: Optional[str] = typer.Option(None, "--component-ids", help="Comma-separated component IDs"),
 ) -> None:
     """Delete multiple sessions."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     params = {
         "session_type": session_type,
         "user_id": user_id,
-        "db_id": get_db_id(),
+        "db_id": resolve_db_id(),
     }
     body = {}
     if component_ids:
@@ -225,7 +225,7 @@ def runs(
     user_id: Optional[str] = typer.Option(None, "--user-id", help="User ID"),
 ) -> None:
     """List runs for a session."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     params = {
@@ -236,7 +236,7 @@ def runs(
         "sort_by": sort_by,
         "sort_order": sort_order,
         "user_id": user_id,
-        "db_id": get_db_id(),
+        "db_id": resolve_db_id(),
     }
 
     try:

@@ -38,6 +38,40 @@ def get_db_id() -> Optional[str]:
     return _state.get("db_id")
 
 
+def resolve_db_id() -> Optional[str]:
+    """Resolve db_id: explicit flag > single-db auto-detect > multi-db error."""
+    explicit = _state.get("db_id")
+    if explicit:
+        return explicit
+
+    if "resolved_db_id" in _state:
+        return _state["resolved_db_id"]
+
+    # Fetch server config to discover available databases
+    try:
+        client = get_client()
+        config = client.get("/config")
+        dbs = config.get("databases", [])
+    except Exception:
+        # Can't reach server — let the actual command fail with its own error
+        _state["resolved_db_id"] = None
+        return None
+
+    if len(dbs) == 1:
+        _state["resolved_db_id"] = dbs[0]
+        return dbs[0]
+    elif len(dbs) > 1:
+        db_list = ", ".join(dbs)
+        print_error(
+            f"Multiple databases available: {db_list}. "
+            "Specify one with --db-id (e.g., agno-os --db-id <name> ...)."
+        )
+        raise typer.Exit(1)
+    else:
+        _state["resolved_db_id"] = None
+        return None
+
+
 def version_callback(value: bool) -> None:
     if value:
         print(f"agno-os {__version__}")

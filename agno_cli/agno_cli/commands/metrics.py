@@ -16,13 +16,13 @@ def get(
     end_date: Optional[str] = typer.Option(None, "--end-date", help="End date (YYYY-MM-DD)"),
 ) -> None:
     """Get aggregated metrics."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     params = {
         "starting_date": start_date,
         "ending_date": end_date,
-        "db_id": get_db_id(),
+        "db_id": resolve_db_id(),
     }
 
     try:
@@ -42,10 +42,10 @@ def get(
 @app.command()
 def refresh() -> None:
     """Refresh metrics (recompute aggregations)."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
-    params = {"db_id": get_db_id()} if get_db_id() else None
+    params = {"db_id": resolve_db_id()} if resolve_db_id() else None
 
     try:
         data = client.post("/metrics/refresh", params=params)

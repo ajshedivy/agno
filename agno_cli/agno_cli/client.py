@@ -92,10 +92,12 @@ class AgnoClient:
         except Exception as e:
             self._handle_error(e)
 
-    def patch(self, endpoint: str, data: Optional[Dict[str, Any]] = None) -> Any:
+    def patch(
+        self, endpoint: str, data: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None
+    ) -> Any:
         """Execute PATCH request."""
         try:
-            kwargs: Dict[str, Any] = {}
+            kwargs: Dict[str, Any] = {"params": _clean_params(params)}
             if data is not None:
                 kwargs["json"] = data
             response = self._client.patch(f"{self.base_url}{endpoint}", **kwargs)

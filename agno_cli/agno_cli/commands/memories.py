@@ -23,7 +23,7 @@ def list_memories(
     sort_order: Optional[str] = typer.Option(None, "--sort-order", help="Sort order: asc, desc"),
 ) -> None:
     """List memories."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     params = {
@@ -35,7 +35,7 @@ def list_memories(
         "page": page,
         "sort_by": sort_by,
         "sort_order": sort_order,
-        "db_id": get_db_id(),
+        "db_id": resolve_db_id(),
     }
     if topics:
         params["topics"] = topics
@@ -63,10 +63,10 @@ def get(
     user_id: Optional[str] = typer.Option(None, "--user-id", help="User ID"),
 ) -> None:
     """Get a specific memory."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
-    params = {"user_id": user_id, "db_id": get_db_id()}
+    params = {"user_id": user_id, "db_id": resolve_db_id()}
 
     try:
         data = client.get(f"/memories/{memory_id}", params=params)
@@ -84,7 +84,7 @@ def create(
     topics: Optional[str] = typer.Option(None, "--topics", help="Comma-separated topics"),
 ) -> None:
     """Create a new memory."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     body = {"memory": memory}
@@ -93,7 +93,7 @@ def create(
     if topics:
         body["topics"] = topics.split(",")
 
-    params = {"db_id": get_db_id()} if get_db_id() else None
+    params = {"db_id": resolve_db_id()} if resolve_db_id() else None
 
     try:
         data = client.post("/memories", data=body, params=params)
@@ -116,7 +116,7 @@ def update(
     topics: Optional[str] = typer.Option(None, "--topics", help="Comma-separated topics"),
 ) -> None:
     """Update a memory."""
-    from agno_cli.main import require_client
+    from agno_cli.main import require_client, resolve_db_id
 
     client = require_client()
     body = {}
@@ -128,7 +128,7 @@ def update(
         body["topics"] = topics.split(",")
 
     try:
-        data = client.patch(f"/memories/{memory_id}", data=body)
+        data = client.patch(f"/memories/{memory_id}", data=body, params={"db_id": resolve_db_id()})
     except AgnoClientError as e:
         print_error(e.message)
         raise typer.Exit(1)
@@ -145,10 +145,10 @@ def delete(
     user_id: Optional[str] = typer.Option(None, "--user-id", help="User ID"),
 ) -> None:
     """Delete a memory."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
-    params = {"user_id": user_id, "db_id": get_db_id()}
+    params = {"user_id": user_id, "db_id": resolve_db_id()}
 
     try:
         client.delete(f"/memories/{memory_id}", params=params)
@@ -166,7 +166,7 @@ def delete_all(
     team_id: Optional[str] = typer.Option(None, "--team-id", help="Team ID"),
 ) -> None:
     """Delete all memories matching filters."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     body = {}
@@ -177,7 +177,7 @@ def delete_all(
     if team_id:
         body["team_id"] = team_id
 
-    params = {"db_id": get_db_id()} if get_db_id() else None
+    params = {"db_id": resolve_db_id()} if resolve_db_id() else None
 
     try:
         client.delete("/memories", data=body if body else None, params=params)
@@ -193,10 +193,10 @@ def topics(
     user_id: Optional[str] = typer.Option(None, "--user-id", help="User ID"),
 ) -> None:
     """List memory topics."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
-    params = {"user_id": user_id, "db_id": get_db_id()}
+    params = {"user_id": user_id, "db_id": resolve_db_id()}
 
     try:
         data = client.get("/memory_topics", params=params)
@@ -223,7 +223,7 @@ def stats(
     page: int = typer.Option(1, "--page", "-p", help="Page number"),
 ) -> None:
     """Get user memory stats."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     params = {
@@ -232,7 +232,7 @@ def stats(
         "team_id": team_id,
         "limit": limit,
         "page": page,
-        "db_id": get_db_id(),
+        "db_id": resolve_db_id(),
     }
 
     try:
@@ -259,7 +259,7 @@ def optimize(
     apply: bool = typer.Option(False, "--apply", help="Apply optimizations (dry-run by default)"),
 ) -> None:
     """Optimize memories (merge duplicates, improve quality)."""
-    from agno_cli.main import get_db_id, require_client
+    from agno_cli.main import resolve_db_id, require_client
 
     client = require_client()
     body = {"apply": apply}
@@ -268,7 +268,7 @@ def optimize(
     if model:
         body["model"] = model
 
-    params = {"db_id": get_db_id()} if get_db_id() else None
+    params = {"db_id": resolve_db_id()} if resolve_db_id() else None
 
     try:
         data = client.post("/optimize-memories", data=body, params=params)
