@@ -17,6 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+pytest.importorskip("ap_client", reason="ap_client not installed (optional dependency)")
+
 from agno.agent import Agent
 from agno.client.agent_protocol.client import AgentProtocolClient
 from agno.os.app import AgentOS
