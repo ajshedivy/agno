@@ -63,8 +63,7 @@ def resolve_db_id() -> Optional[str]:
     elif len(dbs) > 1:
         db_list = ", ".join(dbs)
         print_error(
-            f"Multiple databases available: {db_list}. "
-            "Specify one with --db-id (e.g., agno-os --db-id <name> ...)."
+            f"Multiple databases available: {db_list}. Specify one with --db-id (e.g., agno-os --db-id <name> ...)."
         )
         raise typer.Exit(1)
     else:
