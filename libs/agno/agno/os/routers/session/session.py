@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request
@@ -39,7 +39,7 @@ from agno.os.schema import (
 from agno.os.services.sessions import SessionNotFoundError, get_sessions_page
 from agno.os.services.sessions import get_session_runs as get_session_runs_from_service
 from agno.os.settings import AgnoAPISettings
-from agno.os.utils import AgnoHTTPException
+from agno.os.utils import AgnoHTTPException, db_call
 from agno.remote.base import RemoteDb
 from agno.session import AgentSession, Session, TeamSession, WorkflowSession
 from agno.utils.log import log_debug
@@ -81,10 +81,7 @@ def attach_routes(
         for session_id in session_ids:
             get_kwargs: Dict[str, Any] = {"session_id": session_id, "user_id": user_id}
             try:
-                if isinstance(db, AsyncBaseDb):
-                    session = await db.get_session(**get_kwargs)
-                else:
-                    session = db.get_session(**get_kwargs)
+                session = await db_call(db.get_session, **get_kwargs)
             except Exception as e:
                 logger.warning(f"Could not read session {session_id} for media deletion: {e}")
                 continue
@@ -315,11 +312,9 @@ def attach_routes(
             scoped_user_id = get_scoped_user_id(request)
 
             async def _get(uid: Optional[str]):
-                if isinstance(db, AsyncBaseDb):
-                    return await db.get_session(
-                        session_id=session_id, session_type=session_type, user_id=uid, deserialize=False
-                    )
-                return db.get_session(session_id=session_id, session_type=session_type, user_id=uid, deserialize=False)
+                return await db_call(
+                    db.get_session, session_id=session_id, session_type=session_type, user_id=uid, deserialize=False
+                )
 
             try:
                 owned_session = await _get(scoped_user_id)
@@ -398,11 +393,7 @@ def attach_routes(
 
         # Upsert the session to the database
         try:
-            if isinstance(db, AsyncBaseDb):
-                db = cast(AsyncBaseDb, db)
-                created_session = await db.upsert_session(session, deserialize=True)
-            else:
-                created_session = db.upsert_session(session, deserialize=True)
+            created_session = await db_call(db.upsert_session, session, deserialize=True)
 
             if not created_session:
                 raise HTTPException(status_code=500, detail="Failed to create session")
@@ -541,13 +532,9 @@ def attach_routes(
                 raise HTTPException(status_code=404, detail=f"Session with id '{session_id}' not found")
             session = deserialize_session_by_type(raw if isinstance(raw, dict) else {})
         else:
-            if isinstance(db, AsyncBaseDb):
-                db = cast(AsyncBaseDb, db)
-                session = await db.get_session(
-                    session_id=session_id, session_type=session_type, user_id=effective_user_id
-                )  # type: ignore
-            else:
-                session = db.get_session(session_id=session_id, session_type=session_type, user_id=effective_user_id)  # type: ignore
+            session = await db_call(
+                db.get_session, session_id=session_id, session_type=session_type, user_id=effective_user_id
+            )
 
         if not session:
             raise HTTPException(
@@ -793,21 +780,13 @@ def attach_routes(
                 headers=headers,
             )
 
-        if isinstance(db, AsyncBaseDb):
-            db = cast(AsyncBaseDb, db)
-            session = await db.get_session(
-                session_id=session_id,
-                session_type=session_type,
-                user_id=effective_user_id,
-                deserialize=False,
-            )
-        else:
-            session = db.get_session(
-                session_id=session_id,
-                session_type=session_type,
-                user_id=effective_user_id,
-                deserialize=False,
-            )
+        session = await db_call(
+            db.get_session,
+            session_id=session_id,
+            session_type=session_type,
+            user_id=effective_user_id,
+            deserialize=False,
+        )
 
         if not session:
             raise HTTPException(status_code=404, detail=f"Session with ID {session_id} not found")
@@ -884,11 +863,7 @@ def attach_routes(
 
         media_keys = await _collect_media_keys(db, [session_id], effective_user_id) if delete_media else []
 
-        if isinstance(db, AsyncBaseDb):
-            db = cast(AsyncBaseDb, db)
-            await db.delete_session(**local_kwargs)
-        else:
-            db.delete_session(**local_kwargs)
+        await db_call(db.delete_session, **local_kwargs)
 
         await _delete_media_keys(media_keys)
 
@@ -956,11 +931,7 @@ def attach_routes(
 
         media_keys = await _collect_media_keys(db, request.session_ids, effective_user_id) if delete_media else []
 
-        if isinstance(db, AsyncBaseDb):
-            db = cast(AsyncBaseDb, db)
-            await db.delete_sessions(**local_kwargs)
-        else:
-            db.delete_sessions(**local_kwargs)
+        await db_call(db.delete_sessions, **local_kwargs)
 
         await _delete_media_keys(media_keys)
 
@@ -1087,11 +1058,7 @@ def attach_routes(
             "user_id": effective_user_id,
         }
 
-        if isinstance(db, AsyncBaseDb):
-            db = cast(AsyncBaseDb, db)
-            session = await db.rename_session(**local_kwargs)
-        else:
-            session = db.rename_session(**local_kwargs)
+        session = await db_call(db.rename_session, **local_kwargs)
         if not session:
             raise HTTPException(status_code=404, detail=f"Session with id '{session_id}' not found")
 
@@ -1194,21 +1161,13 @@ def attach_routes(
                 headers=headers,
             )
 
-        if isinstance(db, AsyncBaseDb):
-            db = cast(AsyncBaseDb, db)
-            existing_session = await db.get_session(
-                session_id=session_id,
-                session_type=session_type,
-                user_id=effective_user_id,
-                deserialize=True,
-            )
-        else:
-            existing_session = db.get_session(
-                session_id=session_id,
-                session_type=session_type,
-                user_id=effective_user_id,
-                deserialize=True,
-            )
+        existing_session = await db_call(
+            db.get_session,
+            session_id=session_id,
+            session_type=session_type,
+            user_id=effective_user_id,
+            deserialize=True,
+        )
 
         if not existing_session:
             raise HTTPException(status_code=404, detail=f"Session with id '{session_id}' not found")
@@ -1236,10 +1195,7 @@ def attach_routes(
         # silently re-attribute the session to another user.
         enforce_owner_on_entity(request, existing_session, kind="session")
 
-        if isinstance(db, AsyncBaseDb):
-            updated_session = await db.upsert_session(existing_session, deserialize=True)  # type: ignore
-        else:
-            updated_session = db.upsert_session(existing_session, deserialize=True)  # type: ignore
+        updated_session = await db_call(db.upsert_session, existing_session, deserialize=True)
 
         if not updated_session:
             raise HTTPException(status_code=500, detail="Failed to update session")

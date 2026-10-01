@@ -47,7 +47,7 @@ from fastapi import HTTPException, Query, Request
 from agno.db.base import AsyncBaseDb, BaseDb
 from agno.db.schemas.service_accounts import SERVICE_ACCOUNT_PRINCIPAL_PREFIX
 from agno.os.scopes import AgentOSScope
-from agno.os.utils import get_db
+from agno.os.utils import db_call, get_db
 from agno.remote.base import RemoteDb
 from agno.utils.log import log_warning
 
@@ -458,10 +458,9 @@ async def assert_session_writable(
 
     # user_id is deliberately NOT passed: the probe must see the row regardless of owner.
     # deserialize=False keeps it a raw dict; runs_limit=1 bounds the run attach.
-    if isinstance(db, AsyncBaseDb):
-        row = await db.get_session(session_id=session_id, session_type=session_type, deserialize=False, runs_limit=1)
-    else:
-        row = db.get_session(session_id=session_id, session_type=session_type, deserialize=False, runs_limit=1)
+    row = await db_call(
+        db.get_session, session_id=session_id, session_type=session_type, deserialize=False, runs_limit=1
+    )
     if not row:
         return
     owner = row.get("user_id") if isinstance(row, dict) else getattr(row, "user_id", None)
@@ -529,10 +528,7 @@ async def verify_run_in_session_via_db(
         # No DB to verify against — fail closed.
         raise HTTPException(status_code=404, detail="Run not found")
 
-    if isinstance(db, AsyncBaseDb):
-        session = await db.get_session(session_id=session_id, user_id=user_id)
-    else:
-        session = db.get_session(session_id=session_id, user_id=user_id)
+    session = await db_call(db.get_session, session_id=session_id, user_id=user_id)
 
     if session is None:
         raise HTTPException(status_code=404, detail="Run not found")
