@@ -1,11 +1,13 @@
 import json
 from datetime import date, datetime, time, timezone
+from inspect import iscoroutinefunction
 from os import getenv
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Type, Union
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.routing import APIRoute, APIRouter
 from pydantic import BaseModel, create_model
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.cors import CORSMiddleware
 
 from agno.agent import Agent, AgentFactory, RemoteAgent
@@ -716,6 +718,17 @@ def replayed_payload_to_sse(payload: Any, event_index: int, run_id: str) -> str:
     if isinstance(payload, str):
         return payload
     return format_sse_event_with_index(payload, event_index=event_index, run_id=run_id)
+
+
+async def db_call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """Call a database method without blocking the event loop.
+
+    Async methods are awaited. Sync drivers do blocking I/O, so their methods run
+    in the threadpool (which copies the caller's contextvars into the worker).
+    """
+    if iscoroutinefunction(fn):
+        return await fn(*args, **kwargs)
+    return await run_in_threadpool(fn, *args, **kwargs)
 
 
 async def get_db(
