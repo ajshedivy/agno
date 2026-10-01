@@ -1,6 +1,6 @@
 import logging
 from copy import deepcopy
-from typing import List, Optional, Union, cast
+from typing import List, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
@@ -34,7 +34,7 @@ from agno.os.schema import (
     ValidationErrorResponse,
 )
 from agno.os.settings import AgnoAPISettings
-from agno.os.utils import AgnoHTTPException, get_agent_by_id, get_db, get_team_by_id
+from agno.os.utils import AgnoHTTPException, db_call, get_agent_by_id, get_db, get_team_by_id
 from agno.remote.base import RemoteDb
 from agno.team import RemoteTeam, Team
 from agno.utils.log import log_warning
@@ -148,37 +148,21 @@ def attach_routes(
                 headers=headers,
             )
 
-        if isinstance(db, AsyncBaseDb):
-            db = cast(AsyncBaseDb, db)
-            eval_runs, total_count = await db.get_eval_runs(
-                limit=limit,
-                page=page,
-                sort_by=sort_by,
-                sort_order=sort_order,
-                agent_id=agent_id,
-                team_id=team_id,
-                workflow_id=workflow_id,
-                model_id=model_id,
-                eval_type=eval_types,
-                filter_type=filter_type,
-                deserialize=False,
-                **scope,
-            )
-        else:
-            eval_runs, total_count = db.get_eval_runs(  # type: ignore
-                limit=limit,
-                page=page,
-                sort_by=sort_by,
-                sort_order=sort_order,
-                agent_id=agent_id,
-                team_id=team_id,
-                workflow_id=workflow_id,
-                model_id=model_id,
-                eval_type=eval_types,
-                filter_type=filter_type,
-                deserialize=False,
-                **scope,
-            )
+        eval_runs, total_count = await db_call(
+            db.get_eval_runs,  # type: ignore
+            limit=limit,
+            page=page,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            agent_id=agent_id,
+            team_id=team_id,
+            workflow_id=workflow_id,
+            model_id=model_id,
+            eval_type=eval_types,
+            filter_type=filter_type,
+            deserialize=False,
+            **scope,
+        )
 
         return PaginatedResponse(
             data=[EvalSchema.from_dict(eval_run) for eval_run in eval_runs],  # type: ignore
@@ -240,11 +224,7 @@ def attach_routes(
             headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else None
             return await db.get_eval_run(eval_run_id=eval_run_id, db_id=db_id, table=table, headers=headers)
 
-        if isinstance(db, AsyncBaseDb):
-            db = cast(AsyncBaseDb, db)
-            eval_run = await db.get_eval_run(eval_run_id=eval_run_id, deserialize=False, **scope)
-        else:
-            eval_run = db.get_eval_run(eval_run_id=eval_run_id, deserialize=False, **scope)
+        eval_run = await db_call(db.get_eval_run, eval_run_id=eval_run_id, deserialize=False, **scope)
         if not eval_run:
             raise HTTPException(status_code=404, detail=f"Eval run with id '{eval_run_id}' not found")
 
@@ -277,11 +257,7 @@ def attach_routes(
                     eval_run_ids=request.eval_run_ids, db_id=db_id, table=table, headers=headers
                 )
 
-            if isinstance(db, AsyncBaseDb):
-                db = cast(AsyncBaseDb, db)
-                await db.delete_eval_runs(eval_run_ids=request.eval_run_ids, **scope)
-            else:
-                db.delete_eval_runs(eval_run_ids=request.eval_run_ids, **scope)
+            await db_call(db.delete_eval_runs, eval_run_ids=request.eval_run_ids, **scope)
         except HTTPException:
             raise
         except AgnoError as e:
@@ -344,13 +320,9 @@ def attach_routes(
                     eval_run_id=eval_run_id, name=request.name, db_id=db_id, table=table, headers=headers
                 )
 
-            if isinstance(db, AsyncBaseDb):
-                db = cast(AsyncBaseDb, db)
-                eval_run = await db.rename_eval_run(
-                    eval_run_id=eval_run_id, name=request.name, deserialize=False, **scope
-                )
-            else:
-                eval_run = db.rename_eval_run(eval_run_id=eval_run_id, name=request.name, deserialize=False, **scope)
+            eval_run = await db_call(
+                db.rename_eval_run, eval_run_id=eval_run_id, name=request.name, deserialize=False, **scope
+            )
         except HTTPException:
             raise
         except AgnoError as e:
@@ -538,10 +510,7 @@ def attach_routes(
         if eval_run is not None:
             if creator_user_id is not None:
                 try:
-                    if isinstance(db, AsyncBaseDb):
-                        await db.update_eval_run_user_id(eval_run_id=eval_run.id, user_id=creator_user_id)
-                    else:
-                        db.update_eval_run_user_id(eval_run_id=eval_run.id, user_id=creator_user_id)
+                    await db_call(db.update_eval_run_user_id, eval_run_id=eval_run.id, user_id=creator_user_id)
                     eval_run.user_id = creator_user_id
                 except Exception as e:
                     log_warning(f"Could not set owner on eval run {eval_run.id}: {e}")
