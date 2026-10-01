@@ -25,6 +25,8 @@ from agno.agent._storage import (
     is_auto_generated_memory_manager_id,
     resolve_learning_reference,
     resolve_memory_manager_reference,
+    resolve_skills_reference,
+    skills_to_reference,
 )
 from agno.db.base import AsyncBaseDb, BaseDb, ComponentType, SessionType
 from agno.db.schemas.scheduler import strip_reserved_run_metadata
@@ -653,6 +655,12 @@ def to_dict(team: "Team") -> Dict[str, Any]:
         config["search_knowledge"] = team.search_knowledge
     if not team.add_search_knowledge_instructions:  # default is True
         config["add_search_knowledge_instructions"] = team.add_search_knowledge_instructions
+
+    # --- Skills settings ---
+    if team.skills is not None:
+        skills_reference = skills_to_reference(team.skills, "Team")
+        if skills_reference is not None:
+            config["skills"] = skills_reference
     if team.references_format != "json":  # default is "json"
         config["references_format"] = team.references_format
 
@@ -1290,6 +1298,9 @@ def from_dict(
     # the constructor call below.
     resolve_learning_reference(config, registry, strict, component_label)
 
+    # --- Handle Skills reconstruction ---
+    resolve_skills_reference(config, registry, strict, component_label)
+
     team = cast(
         "Team",
         cls(
@@ -1354,6 +1365,8 @@ def from_dict(
             search_knowledge=config.get("search_knowledge", True),
             add_search_knowledge_instructions=config.get("add_search_knowledge_instructions", True),
             references_format=config.get("references_format", "json"),
+            # --- Skills settings ---
+            skills=config.get("skills"),
             # --- Tools ---
             tools=config.get("tools"),
             tool_call_limit=config.get("tool_call_limit"),

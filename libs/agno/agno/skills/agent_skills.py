@@ -24,10 +24,13 @@ class Skills:
 
     Args:
         loaders: List of SkillLoader instances to load skills from.
+        name: Name the Registry resolves this instance by. A stored agent or team
+            references its skills by this name; unnamed skills are not saved with it.
     """
 
-    def __init__(self, loaders: List[SkillLoader]):
+    def __init__(self, loaders: List[SkillLoader], name: Optional[str] = None):
         self.loaders = loaders
+        self.name = name
         self._skills: Dict[str, Skill] = {}
         self._load_skills()
 
