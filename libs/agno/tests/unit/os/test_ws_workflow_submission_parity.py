@@ -10,6 +10,8 @@ import json
 from types import SimpleNamespace
 from typing import Any, List
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from agno.db.schemas.scheduler import COMPONENT_VERSION_METADATA_KEY
@@ -37,7 +39,7 @@ def ws_env(monkeypatch):
     stream = InMemoryEventStream(events_buffer=EventsBuffer(), subscriber_manager=SSESubscriberManager())
     monkeypatch.setattr(ws_router, "get_event_stream", lambda: stream)
     workflow = Workflow(id="wf1", name="WF", db=InMemoryDb())
-    monkeypatch.setattr(ws_router, "get_workflow_by_id", lambda **kwargs: workflow)
+    monkeypatch.setattr(ws_router, "get_workflow_by_id_async", AsyncMock(return_value=workflow))
 
     async def no_prepare(*args, **kwargs):
         return None

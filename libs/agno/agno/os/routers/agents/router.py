@@ -16,6 +16,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 
 from agno.agent.agent import Agent
 from agno.agent.factory import AgentFactory
@@ -73,13 +74,13 @@ from agno.os.schema import (
 from agno.os.settings import AgnoAPISettings
 from agno.os.utils import (
     afinalize_continue_stream,
-    allow_draft_preview,
+    allow_draft_preview_async,
     amark_continue_stream_running,
     classify_upload_file,
     draft_preview_identity,
     find_factory_by_id,
     format_sse_event,
-    get_agent_by_id,
+    get_agent_by_id_async,
     get_request_kwargs,
     parse_files_metadata,
     process_audio,
@@ -1196,7 +1197,7 @@ def get_agent_router(
             return JSONResponse(content={}, status_code=200)
 
         try:
-            agent = get_agent_by_id(
+            agent = await get_agent_by_id_async(
                 agent_id=agent_id,
                 agents=os.agents,
                 db=os.db,
@@ -1386,7 +1387,7 @@ def get_agent_router(
             )
         else:
             try:
-                agent = get_agent_by_id(
+                agent = await get_agent_by_id_async(
                     agent_id=agent_id,
                     agents=os.agents,
                     db=os.db,
@@ -1443,10 +1444,12 @@ def get_agent_router(
                 # must not resolve (defense against a forged/leaked stamp).
                 # Same 404 the run-start route raises, so a denial is
                 # indistinguishable from the component being absent.
-                if not allow_draft_preview(os.db, agent_id, stamped_version, *draft_preview_identity(request)):
+                if not await allow_draft_preview_async(
+                    os.db, agent_id, stamped_version, *draft_preview_identity(request)
+                ):
                     raise HTTPException(status_code=404, detail="Agent not found")
                 try:
-                    stamped_agent = get_agent_by_id(
+                    stamped_agent = await get_agent_by_id_async(
                         agent_id=agent_id,
                         agents=os.agents,
                         db=os.db,
@@ -1751,7 +1754,7 @@ def get_agent_router(
             user_id = request.state.user_id
 
         try:
-            agent = get_agent_by_id(
+            agent = await get_agent_by_id_async(
                 agent_id=agent_id,
                 agents=os.agents,
                 db=os.db,
@@ -1881,7 +1884,8 @@ def get_agent_router(
             # rehydration context this route never lists - so subtracting it
             # would drop a stored agent with nothing left to list it back.
             exclude_ids = {aid for a in os.agents or [] if (aid := getattr(a, "id", None)) is not None}
-            db_agents = get_agents(
+            db_agents = await run_in_threadpool(
+                get_agents,
                 db=os.db,
                 registry=registry,
                 exclude_component_ids=exclude_ids or None,
@@ -1943,7 +1947,7 @@ def get_agent_router(
             return AgentResponse.from_factory(factory)
 
         try:
-            agent = get_agent_by_id(
+            agent = await get_agent_by_id_async(
                 agent_id=agent_id,
                 agents=os.agents,
                 db=os.db,
@@ -2008,7 +2012,7 @@ def get_agent_router(
             )
         else:
             try:
-                agent = get_agent_by_id(
+                agent = await get_agent_by_id_async(
                     agent_id=agent_id,
                     agents=os.agents,
                     db=os.db,
@@ -2112,7 +2116,7 @@ def get_agent_router(
             )
         else:
             try:
-                agent = get_agent_by_id(
+                agent = await get_agent_by_id_async(
                     agent_id=agent_id,
                     agents=os.agents,
                     db=os.db,
@@ -2183,7 +2187,7 @@ def get_agent_router(
             )
         else:
             try:
-                agent = get_agent_by_id(
+                agent = await get_agent_by_id_async(
                     agent_id=agent_id,
                     agents=os.agents,
                     db=os.db,
@@ -2286,7 +2290,7 @@ def get_agent_router(
                 detail="Stream resumption is not supported for factory agents",
             )
 
-        agent = get_agent_by_id(
+        agent = await get_agent_by_id_async(
             agent_id=agent_id,
             agents=os.agents,
             db=os.db,
@@ -2352,7 +2356,7 @@ def get_agent_router(
             )
         else:
             try:
-                agent = get_agent_by_id(
+                agent = await get_agent_by_id_async(
                     agent_id=agent_id,
                     agents=os.agents,
                     db=os.db,

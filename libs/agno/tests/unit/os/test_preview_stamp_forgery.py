@@ -396,7 +396,7 @@ class TestWsContinueRefusesForbiddenStamp:
 
         calls = {"n": 0}
 
-        def _fake_get_workflow_by_id(**kwargs):
+        async def _fake_get_workflow_by_id(**kwargs):
             calls["n"] += 1
             # First call: the working handle. A version-pinned call means the
             # re-gate PASSED and we are now resolving the stamped draft.
@@ -415,7 +415,7 @@ class TestWsContinueRefusesForbiddenStamp:
 
         os_stub = SimpleNamespace(workflows=[], db=db, registry=registry)
         ws = FakeWebSocket()
-        with patch.object(wf_router, "get_workflow_by_id", _fake_get_workflow_by_id):
+        with patch.object(wf_router, "get_workflow_by_id_async", _fake_get_workflow_by_id):
             await handle_workflow_continue_via_websocket(
                 ws,
                 {"workflow_id": "pv-flow", "run_id": "r-1", "session_id": "s-1", "user_id": "bob"},

@@ -554,7 +554,7 @@ def resolve_owned_agent(os: "AgentOS") -> Callable:
     raise 404 so the existence of another user's run isn't leaked. Admins and
     unauthenticated callers bypass the ownership check entirely.
     """
-    from agno.os.utils import get_agent_by_id
+    from agno.os.utils import get_agent_by_id_async
 
     async def dependency(
         request: Request,
@@ -565,7 +565,7 @@ def resolve_owned_agent(os: "AgentOS") -> Callable:
             description="Session ID the run belongs to. Required for non-admin JWT users.",
         ),
     ) -> "Union[Agent, RemoteAgent, AgentProtocol]":
-        agent = get_agent_by_id(
+        agent = await get_agent_by_id_async(
             agent_id=agent_id,
             agents=os.agents,
             db=os.db,
@@ -597,7 +597,7 @@ def resolve_owned_team(os: "AgentOS") -> Callable:
 
     See ``resolve_owned_agent`` for behaviour.
     """
-    from agno.os.utils import get_team_by_id
+    from agno.os.utils import get_team_by_id_async
 
     async def dependency(
         request: Request,
@@ -608,7 +608,7 @@ def resolve_owned_team(os: "AgentOS") -> Callable:
             description="Session ID the run belongs to. Required for non-admin JWT users.",
         ),
     ) -> "Union[Team, RemoteTeam]":
-        team = get_team_by_id(
+        team = await get_team_by_id_async(
             team_id=team_id,
             teams=os.teams,
             db=os.db,
@@ -640,7 +640,7 @@ def resolve_owned_workflow(os: "AgentOS") -> Callable:
 
     See ``resolve_owned_agent`` for behaviour.
     """
-    from agno.os.utils import get_workflow_by_id
+    from agno.os.utils import get_workflow_by_id_async
 
     async def dependency(
         request: Request,
@@ -651,7 +651,7 @@ def resolve_owned_workflow(os: "AgentOS") -> Callable:
             description="Session ID the run belongs to. Required for non-admin JWT users.",
         ),
     ) -> "Union[Workflow, RemoteWorkflow]":
-        workflow = get_workflow_by_id(
+        workflow = await get_workflow_by_id_async(
             workflow_id=workflow_id,
             workflows=os.workflows,
             db=os.db,

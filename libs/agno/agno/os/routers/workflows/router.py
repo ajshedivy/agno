@@ -17,6 +17,7 @@ from fastapi import (
     WebSocket,
 )
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from agno.db.base import BaseDb, SessionType
@@ -73,13 +74,12 @@ from agno.os.schema import (
 from agno.os.settings import AgnoAPISettings
 from agno.os.utils import (
     afinalize_continue_stream,
-    allow_draft_preview,
+    allow_draft_preview_async,
     amark_continue_stream_running,
     draft_preview_identity,
     find_factory_by_id,
     format_sse_event,
     get_request_kwargs,
-    get_workflow_by_id,
     get_workflow_by_id_async,
     queued_run_tail_streamer,
     replayed_payload_to_sse,
@@ -230,8 +230,12 @@ async def handle_workflow_via_websocket(
         # off; a plain authenticated caller keeps its raw identity even when
         # isolation is off (scoped_user_id None must not read as admin).
         preview_privileged = bool(ws_auth and ws_auth.is_admin) or not bool(ws_auth and ws_auth.jwt_enabled)
-        if not allow_draft_preview(
-            os.db, workflow_id, version, user_id if isinstance(user_id, str) else None, privileged=preview_privileged
+        if not await allow_draft_preview_async(
+            os.db,
+            workflow_id,
+            version,
+            user_id if isinstance(user_id, str) else None,
+            privileged=preview_privileged,
         ):
             await websocket.send_text(json.dumps({"event": "error", "error": f"Workflow {workflow_id} not found"}))
             return
@@ -274,7 +278,7 @@ async def handle_workflow_via_websocket(
                 return
         else:
             try:
-                workflow = get_workflow_by_id(
+                workflow = await get_workflow_by_id_async(
                     workflow_id=workflow_id,
                     workflows=os.workflows,
                     db=os.db,
@@ -572,7 +576,7 @@ async def handle_workflow_subscription(
                 try:
                     # Lenient: replay only reads stored events through the
                     # workflow's db handle, never its resolved references.
-                    workflow = get_workflow_by_id(
+                    workflow = await get_workflow_by_id_async(
                         workflow_id=workflow_id,
                         workflows=os.workflows,
                         db=os.db,
@@ -790,7 +794,7 @@ async def handle_workflow_continue_via_websocket(
                 await websocket.send_text(json.dumps({"event": "error", "error": f"Run {run_id} not found"}))
                 return
 
-        workflow = get_workflow_by_id(
+        workflow = await get_workflow_by_id_async(
             workflow_id=workflow_id,
             workflows=os.workflows,
             db=os.db,
@@ -839,12 +843,12 @@ async def handle_workflow_continue_via_websocket(
             # from the component being absent.
             preview_privileged = bool(ws_auth and ws_auth.is_admin) or not bool(ws_auth and ws_auth.jwt_enabled)
             preview_actor = user_id if isinstance(user_id, str) else None
-            if not allow_draft_preview(
+            if not await allow_draft_preview_async(
                 os.db, workflow_id, stamped_version, preview_actor, privileged=preview_privileged
             ):
                 await websocket.send_text(json.dumps({"event": "error", "error": f"Workflow {workflow_id} not found"}))
                 return
-            stamped_workflow = get_workflow_by_id(
+            stamped_workflow = await get_workflow_by_id_async(
                 workflow_id=workflow_id,
                 workflows=os.workflows,
                 db=os.db,
@@ -1542,7 +1546,8 @@ def get_workflow_router(
             # subtracting it instead would drop a stored workflow with nothing
             # left to list it back.
             exclude_ids = {wid for w in os.workflows or [] if (wid := getattr(w, "id", None)) is not None}
-            db_workflows = get_workflows(
+            db_workflows = await run_in_threadpool(
+                get_workflows,
                 db=os.db,
                 registry=os.registry,
                 exclude_component_ids=exclude_ids or None,
@@ -1606,11 +1611,11 @@ def get_workflow_router(
         # so without this gate any actor who can see it could pin - and read -
         # the owner's unpublished drafts. Same 404 the run routes raise, so a
         # denial is indistinguishable from the component being absent.
-        if not allow_draft_preview(os.db, workflow_id, version, *draft_preview_identity(request)):
+        if not await allow_draft_preview_async(os.db, workflow_id, version, *draft_preview_identity(request)):
             raise HTTPException(status_code=404, detail="Workflow not found")
 
         try:
-            workflow = get_workflow_by_id(
+            workflow = await get_workflow_by_id_async(
                 workflow_id=workflow_id,
                 workflows=os.workflows,
                 db=os.db,
@@ -2179,10 +2184,12 @@ def get_workflow_router(
             # resolve (defense against a forged/leaked stamp). Same 404 the
             # run-start route raises, so a denial is indistinguishable from the
             # component being absent.
-            if not allow_draft_preview(os.db, workflow_id, stamped_version, *draft_preview_identity(request)):
+            if not await allow_draft_preview_async(
+                os.db, workflow_id, stamped_version, *draft_preview_identity(request)
+            ):
                 raise HTTPException(status_code=404, detail="Workflow not found")
             try:
-                stamped_workflow = get_workflow_by_id(
+                stamped_workflow = await get_workflow_by_id_async(
                     workflow_id=workflow_id,
                     workflows=os.workflows,
                     db=os.db,
@@ -2427,7 +2434,7 @@ def get_workflow_router(
             return JSONResponse(content={}, status_code=200)
 
         try:
-            workflow = get_workflow_by_id(
+            workflow = await get_workflow_by_id_async(
                 workflow_id=workflow_id,
                 workflows=os.workflows,
                 db=os.db,
@@ -2528,7 +2535,7 @@ def get_workflow_router(
                 detail="Stream resumption is not supported for factory workflows",
             )
 
-        workflow = get_workflow_by_id(
+        workflow = await get_workflow_by_id_async(
             workflow_id=workflow_id,
             workflows=os.workflows,
             db=os.db,
@@ -2605,7 +2612,7 @@ def get_workflow_router(
             )
         else:
             try:
-                workflow = get_workflow_by_id(
+                workflow = await get_workflow_by_id_async(
                     workflow_id=workflow_id,
                     workflows=os.workflows,
                     db=os.db,

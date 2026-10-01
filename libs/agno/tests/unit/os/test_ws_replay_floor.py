@@ -12,6 +12,8 @@ import json
 from types import SimpleNamespace
 from typing import Any, List
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from agno.run.base import RunStatus
@@ -54,7 +56,7 @@ async def test_ws_db_fallback_replay_honors_floor_and_stored_indices(monkeypatch
         return run_output
 
     monkeypatch.setattr(workflow, "aget_run_output", fake_aget_run_output)
-    monkeypatch.setattr("agno.os.routers.workflows.router.get_workflow_by_id", lambda **kwargs: workflow)
+    monkeypatch.setattr("agno.os.routers.workflows.router.get_workflow_by_id_async", AsyncMock(return_value=workflow))
 
     ws = FakeWebSocket()
     os_stub = SimpleNamespace(workflows=[workflow], db=None, registry=None)
@@ -91,7 +93,7 @@ async def test_ws_db_fallback_without_floor_replays_everything(monkeypatch):
         return run_output
 
     monkeypatch.setattr(workflow, "aget_run_output", fake_aget_run_output)
-    monkeypatch.setattr("agno.os.routers.workflows.router.get_workflow_by_id", lambda **kwargs: workflow)
+    monkeypatch.setattr("agno.os.routers.workflows.router.get_workflow_by_id_async", AsyncMock(return_value=workflow))
 
     ws = FakeWebSocket()
     os_stub = SimpleNamespace(workflows=[workflow], db=None, registry=None)
