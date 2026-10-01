@@ -700,6 +700,10 @@ def attach_routes(
         raise ValueError("Component routes require a sync database (BaseDb), not an async database.")
     db: BaseDb = os_db  # Type narrowed after isinstance check
 
+    # The handlers below are plain ``def``: every one is sync work over a sync db,
+    # so FastAPI runs each in its threadpool, keeping the db I/O (and the
+    # read-modify-write sequences) off the event loop as a single unit.
+
     @router.get(
         "/components",
         response_model=PaginatedResponse[ComponentResponse],
@@ -709,7 +713,7 @@ def attach_routes(
         summary="List Components",
         description="Retrieve a paginated list of components with optional filtering by type.",
     )
-    async def list_components(
+    def list_components(
         request: Request,
         component_type: Optional[ComponentType] = Query(None, description="Filter by type: agent, team, workflow"),
         page: int = Query(1, ge=1, description="Page number"),
@@ -784,7 +788,7 @@ def attach_routes(
         summary="Create Component",
         description="Create a new component (agent, team, or workflow) with initial config.",
     )
-    async def create_component(
+    def create_component(
         request: Request,
         body: ComponentCreate,
     ) -> ComponentResponse:
@@ -888,7 +892,7 @@ def attach_routes(
         summary="Get Component",
         description="Retrieve a component by ID.",
     )
-    async def get_component(
+    def get_component(
         request: Request,
         component_id: str = Path(description="Component ID"),
         include_deleted: bool = Query(
@@ -919,7 +923,7 @@ def attach_routes(
         summary="Update Component",
         description="Partially update a component by ID.",
     )
-    async def update_component(
+    def update_component(
         request: Request,
         component_id: str = Path(description="Component ID"),
         body: ComponentUpdate = Body(description="Component fields to update"),
@@ -1035,7 +1039,7 @@ def attach_routes(
         summary="Delete Component",
         description="Delete a component by ID.",
     )
-    async def delete_component(
+    def delete_component(
         request: Request,
         component_id: str = Path(description="Component ID"),
         expected_current_version: Optional[int] = Query(
@@ -1097,7 +1101,7 @@ def attach_routes(
         summary="Restore Component",
         description="Restore an archived (soft-deleted) component by ID.",
     )
-    async def restore_component(
+    def restore_component(
         request: Request,
         component_id: str = Path(description="Component ID"),
     ) -> ComponentResponse:
@@ -1141,7 +1145,7 @@ def attach_routes(
         summary="List Configs",
         description="List all configs for a component.",
     )
-    async def list_configs(
+    def list_configs(
         request: Request,
         component_id: str = Path(description="Component ID"),
         include_config: bool = Query(True, description="Include full config blob"),
@@ -1173,7 +1177,7 @@ def attach_routes(
         summary="Create Config Version",
         description="Create a new config version for a component.",
     )
-    async def create_config(
+    def create_config(
         request: Request,
         component_id: str = Path(description="Component ID"),
         body: ConfigCreate = Body(description="Config data"),
@@ -1238,7 +1242,7 @@ def attach_routes(
         summary="Update Draft Config",
         description="Update an existing draft config. Cannot update published configs.",
     )
-    async def update_config(
+    def update_config(
         request: Request,
         component_id: str = Path(description="Component ID"),
         version: int = Path(description="Version number"),
@@ -1307,7 +1311,7 @@ def attach_routes(
         summary="Get Current Config",
         description="Get the current config version for a component.",
     )
-    async def get_current_config(
+    def get_current_config(
         request: Request,
         component_id: str = Path(description="Component ID"),
     ) -> ComponentConfigResponse:
@@ -1337,7 +1341,7 @@ def attach_routes(
         summary="Get Config Version",
         description="Get a specific config version by number.",
     )
-    async def get_config_version(
+    def get_config_version(
         request: Request,
         component_id: str = Path(description="Component ID"),
         version: int = Path(description="Version number"),
@@ -1376,7 +1380,7 @@ def attach_routes(
         summary="Delete Config Version",
         description="Delete a specific draft config version. Cannot delete published or current configs.",
     )
-    async def delete_config_version(
+    def delete_config_version(
         request: Request,
         component_id: str = Path(description="Component ID"),
         version: int = Path(description="Version number"),
@@ -1417,7 +1421,7 @@ def attach_routes(
         summary="Set Current Config Version",
         description="Set a published config version as current (for rollback).",
     )
-    async def set_current_config(
+    def set_current_config(
         request: Request,
         component_id: str = Path(description="Component ID"),
         version: int = Path(description="Version number"),
