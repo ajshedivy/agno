@@ -766,12 +766,7 @@ async def get_db(
 
         # Then check if table actually exists in the database
         try:
-            if isinstance(db, AsyncBaseDb):
-                # For async databases, await the check
-                return await db.table_exists(table_name)
-            else:
-                # For sync databases, call directly
-                return db.table_exists(table_name)
+            return await db_call(db.table_exists, table_name)
         except (NotImplementedError, AttributeError):
             # If table_exists not implemented, fall back to configuration check
             return is_configured

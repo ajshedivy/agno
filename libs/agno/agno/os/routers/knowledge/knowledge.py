@@ -4,6 +4,7 @@ import math
 from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Path, Query, Request, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from agno.db.base import AsyncBaseDb
 from agno.exceptions import AgnoError
@@ -502,7 +503,7 @@ def attach_routes(router: APIRouter, knowledge_instances: List[Union[Knowledge, 
             if knowledge.contents_db is not None and isinstance(knowledge.contents_db, AsyncBaseDb):
                 updated_content_dict = await knowledge.apatch_content(content, user_id=scoped_user_id)
             else:
-                updated_content_dict = knowledge.patch_content(content, user_id=scoped_user_id)
+                updated_content_dict = await run_in_threadpool(knowledge.patch_content, content, user_id=scoped_user_id)
         except AgnoError as e:
             raise AgnoHTTPException(e)
         except Exception as e:
@@ -1763,7 +1764,7 @@ async def process_content(
             if knowledge.contents_db is not None and isinstance(knowledge.contents_db, AsyncBaseDb):
                 await knowledge.apatch_content(content)
             else:
-                knowledge.patch_content(content)
+                await run_in_threadpool(knowledge.patch_content, content)
 
         except Exception:
             # Swallow any secondary errors to avoid crashing the background task
