@@ -2373,6 +2373,9 @@ def collect_components_from_agent(agent: Any, registry: Registry, visited: Set[i
     # AgentOS resolves through must hold it. add_learning ignores True, None
     # and unnamed (inline) machines.
     registry.add_learning(getattr(agent, "learning", None))
+    # Named Skills are a registry resource the same way: a stored config
+    # references them by name. add_skills ignores None and unnamed instances.
+    registry.add_skills(getattr(agent, "skills", None))
 
 
 def collect_components_from_team(team: Any, registry: Registry, visited: Set[int]) -> None:
@@ -2397,6 +2400,7 @@ def collect_components_from_team(team: Any, registry: Registry, visited: Set[int
     registry.add_db(getattr(team, "db", None))
     _collect_components_from_knowledge(getattr(team, "knowledge", None), registry)
     registry.add_learning(getattr(team, "learning", None))
+    registry.add_skills(getattr(team, "skills", None))
 
     members = getattr(team, "members", None)
     if isinstance(members, list):

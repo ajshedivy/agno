@@ -239,6 +239,63 @@ def resolve_learning_reference(
     config.pop("learning", None)
 
 
+def skills_to_reference(skills: Any, component_kind: str) -> Optional[Dict[str, str]]:
+    """The ``{"name": ...}`` reference to_dict stores for a component's skills.
+
+    Skills hold loaders and the files they loaded, so, like knowledge, a stored
+    component names them and the registry supplies the live instance on load.
+    Unnamed skills cannot be referenced and are not saved.
+    """
+    name = getattr(skills, "name", None)
+    if isinstance(name, str) and name:
+        return {"name": name}
+    log_warning(
+        f"{component_kind} skills have no name; they cannot be referenced from the registry and will not be saved."
+    )
+    return None
+
+
+def resolve_skills_reference(
+    config: Dict[str, Any],
+    registry: Optional[Registry],
+    strict: bool,
+    component_label: str,
+) -> None:
+    """Replace a ``config["skills"]`` reference with the registered Skills.
+
+    Agents and teams write and read the reference identically, so both call
+    this. A config without the key (every config stored before skills were
+    saved) loads with no skills. A reference that cannot be resolved is
+    dropped, or refused under strict, as for learning.
+    """
+    reference = config.pop("skills", None)
+    if reference is None:
+        return
+    name = reference.get("name") if isinstance(reference, dict) else None
+
+    if registry is not None and isinstance(name, str) and name:
+        if registry.skills_name_is_ambiguous(name):
+            if strict:
+                raise ComponentRehydrationError(
+                    f"{component_label} references skills '{name}', but two distinct Skills are "
+                    "registered under that name, so the reference could bind the wrong ones. "
+                    "Give the instances distinct names."
+                )
+            log_warning(f"Skills name '{name}' matches more than one registered instance; binding the first.")
+        skills = registry.get_skills(name)
+        if skills is not None:
+            config["skills"] = skills
+            return
+
+    if strict:
+        raise ComponentRehydrationError(
+            f"{component_label} references skills {name or reference!r} which were not found in the "
+            "registry. Register the Skills in the process serving the component, or pass "
+            "strict=False to load the component without them."
+        )
+    log_warning(f"Skills {name or reference!r} not found in registry; loading the component without them.")
+
+
 # ---------------------------------------------------------------------------
 # Run output accessors
 # ---------------------------------------------------------------------------
@@ -971,6 +1028,12 @@ def to_dict(agent: Agent) -> Dict[str, Any]:
     if agent.references_format != "json":
         config["references_format"] = agent.references_format
 
+    # --- Skills settings ---
+    if agent.skills is not None:
+        skills_reference = skills_to_reference(agent.skills, "Agent")
+        if skills_reference is not None:
+            config["skills"] = skills_reference
+
     # --- Tools ---
     # Serialize tools to their dictionary representations (skip callable factories)
     _tools: List[Union[Function, dict]] = []
@@ -1404,6 +1467,9 @@ def from_dict(
         inline = {key: value for key, value in config["learning"].items() if key != "name"}
         config["learning"] = LearningMachine.from_dict(inline)
 
+    # --- Handle Skills reconstruction ---
+    resolve_skills_reference(config, registry, strict, component_label)
+
     # Remove keys that aren't constructor parameters
     config.pop("team_id", None)
     config.pop("workflow_id", None)
@@ -1453,6 +1519,8 @@ def from_dict(
         enable_agentic_knowledge_filters=config.get("enable_agentic_knowledge_filters", False),
         add_knowledge_to_context=config.get("add_knowledge_to_context", False),
         references_format=config.get("references_format", "json"),
+        # --- Skills settings ---
+        skills=config.get("skills"),
         # --- Tools ---
         tools=config.get("tools"),
         tool_call_limit=config.get("tool_call_limit"),

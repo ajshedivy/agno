@@ -111,6 +111,11 @@ class Registry:
     # Names claimed by two distinct machines: lenient resolution keeps the
     # first, strict resolution refuses the ambiguity.
     _ambiguous_learning_names: Set[str] = field(default_factory=set, init=False, repr=False)
+    # Skills stored components reference. Resolved by name, like learning: a
+    # component config carries {"name": ...} and the registry supplies the
+    # live Skills on load.
+    skills: List[Any] = field(default_factory=list)
+    _ambiguous_skills_names: Set[str] = field(default_factory=set, init=False, repr=False)
     memory_managers: List[Any] = field(default_factory=list)
     session_summary_managers: List[Any] = field(default_factory=list)
     # Code-defined agents, teams, and workflows (for rehydration)
@@ -677,6 +682,28 @@ class Registry:
             return
         self.learning.append(machine)
 
+    def add_skills(self, skills: Any) -> None:
+        """Add a Skills instance unless one with the same name is already present.
+
+        Skills resolve by name at rehydration, so only named instances are
+        registrable. The first instance under a name wins; a distinct
+        same-named instance is reported, since it would be shadowed.
+        """
+        name = getattr(skills, "name", None)
+        if skills is None or not isinstance(name, str) or not name:
+            return
+        existing = self.get_skills(name)
+        if existing is not None:
+            if existing is not skills:
+                self._ambiguous_skills_names.add(name)
+                log_warning(
+                    f"Registry: multiple distinct Skills share name '{name}'; "
+                    "keeping the first for lenient loads. Strict loads refuse the ambiguity: "
+                    "give the instances distinct names."
+                )
+            return
+        self.skills.append(skills)
+
     def add_schema(self, schema: Any) -> None:
         """Add an input/output schema class unless one with the same name is already present.
 
@@ -825,6 +852,17 @@ class Registry:
         if self.learning:
             return {mn for m in self.learning if isinstance((mn := getattr(m, "name", None)), str) and mn}
         return set()
+
+    def skills_name_is_ambiguous(self, name: str) -> bool:
+        """Whether two distinct Skills instances claim ``name``."""
+        if name in self._ambiguous_skills_names:
+            return True
+        matches = [s for s in self.skills if getattr(s, "name", None) == name]
+        return len({id(s) for s in matches}) > 1
+
+    def get_skills(self, name: str) -> Optional[Any]:
+        """Get a Skills instance by name from the registry."""
+        return next((s for s in self.skills if getattr(s, "name", None) == name), None)
 
     def get_memory_manager(self, manager_id: str) -> Optional[Any]:
         """Get a memory manager by id."""
