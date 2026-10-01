@@ -129,6 +129,8 @@ class TeamResponse(BaseModel):
             async_mode=True,
             team_run_context={},
             check_mcp_tools=False,
+            # Listing describes the tools; it must not open (and leak) connections.
+            connect_tools=False,
         )
         team_tools = _tools
         formatted_tools = format_team_tools(team_tools) if team_tools else None

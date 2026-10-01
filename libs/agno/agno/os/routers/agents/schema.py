@@ -133,6 +133,8 @@ class AgentResponse(BaseModel):
             run_response=RunOutput(run_id=run_id, session_id=session_id),
             run_context=RunContext(run_id=run_id, session_id=session_id, user_id=agent.user_id),
             check_mcp_tools=False,
+            # Listing describes the tools; it must not open (and leak) connections.
+            connect_tools=False,
         )
         formatted_tools = format_tools(agent_tools) if agent_tools else None
 
