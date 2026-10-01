@@ -28,7 +28,7 @@ from agno.os.schema import (
     ValidationErrorResponse,
 )
 from agno.os.settings import AgnoAPISettings
-from agno.os.utils import AgnoHTTPException, timestamp_to_datetime
+from agno.os.utils import AgnoHTTPException, db_call, timestamp_to_datetime
 from agno.remote.base import RemoteDb
 from agno.utils.log import log_error
 
@@ -204,34 +204,20 @@ def attach_routes(router: APIRouter, dbs: dict[str, list[Union[BaseDb, AsyncBase
             start_time_dt = timestamp_to_datetime(start_time, "start_time") if start_time else None
             end_time_dt = timestamp_to_datetime(end_time, "end_time") if end_time else None
 
-            if isinstance(db, AsyncBaseDb):
-                traces, total_count = await db.get_traces(
-                    run_id=run_id,
-                    session_id=session_id,
-                    user_id=effective_user_id,
-                    agent_id=agent_id,
-                    team_id=team_id,
-                    workflow_id=workflow_id,
-                    status=status,
-                    start_time=start_time_dt,
-                    end_time=end_time_dt,
-                    limit=limit,
-                    page=page,
-                )
-            else:
-                traces, total_count = db.get_traces(
-                    run_id=run_id,
-                    session_id=session_id,
-                    user_id=effective_user_id,
-                    agent_id=agent_id,
-                    team_id=team_id,
-                    workflow_id=workflow_id,
-                    status=status,
-                    start_time=start_time_dt,
-                    end_time=end_time_dt,
-                    limit=limit,
-                    page=page,
-                )
+            traces, total_count = await db_call(
+                db.get_traces,
+                run_id=run_id,
+                session_id=session_id,
+                user_id=effective_user_id,
+                agent_id=agent_id,
+                team_id=team_id,
+                workflow_id=workflow_id,
+                status=status,
+                start_time=start_time_dt,
+                end_time=end_time_dt,
+                limit=limit,
+                page=page,
+            )
 
             end_time_ms = time_module.time() * 1000
             search_time_ms = round(end_time_ms - start_time_ms, 2)
@@ -241,10 +227,7 @@ def attach_routes(router: APIRouter, dbs: dict[str, list[Union[BaseDb, AsyncBase
 
             trace_inputs = {}
             for trace in traces:
-                if isinstance(db, AsyncBaseDb):
-                    spans = await db.get_spans(trace_id=trace.trace_id)
-                else:
-                    spans = db.get_spans(trace_id=trace.trace_id)
+                spans = await db_call(db.get_spans, trace_id=trace.trace_id)
 
                 # Find root span and extract input
                 root_span = next((s for s in spans if not s.parent_span_id), None)
@@ -428,19 +411,13 @@ def attach_routes(router: APIRouter, dbs: dict[str, list[Union[BaseDb, AsyncBase
             # user-scoped at the DB layer (no user_id column); the parent
             # trace_id check ensures the span belongs to the requested trace.
             if span_id:
-                if isinstance(db, AsyncBaseDb):
-                    parent_trace = await db.get_trace(trace_id=trace_id, run_id=run_id)
-                else:
-                    parent_trace = db.get_trace(trace_id=trace_id, run_id=run_id)
+                parent_trace = await db_call(db.get_trace, trace_id=trace_id, run_id=run_id)
 
                 if parent_trace is None:
                     raise HTTPException(status_code=404, detail="Trace not found")
                 _require_trace_owner(parent_trace, effective_user_id)
 
-                if isinstance(db, AsyncBaseDb):
-                    span = await db.get_span(span_id)
-                else:
-                    span = db.get_span(span_id)
+                span = await db_call(db.get_span, span_id)
 
                 if span is None:
                     raise HTTPException(status_code=404, detail="Span not found")
@@ -453,20 +430,14 @@ def attach_routes(router: APIRouter, dbs: dict[str, list[Union[BaseDb, AsyncBase
                 return TraceNode.from_span(span, spans=None)
 
             # Otherwise, return full trace with hierarchy
-            if isinstance(db, AsyncBaseDb):
-                trace = await db.get_trace(trace_id=trace_id, run_id=run_id)
-            else:
-                trace = db.get_trace(trace_id=trace_id, run_id=run_id)
+            trace = await db_call(db.get_trace, trace_id=trace_id, run_id=run_id)
 
             if trace is None:
                 raise HTTPException(status_code=404, detail="Trace not found")
             _require_trace_owner(trace, effective_user_id)
 
             # Get all spans for this trace
-            if isinstance(db, AsyncBaseDb):
-                spans = await db.get_spans(trace_id=trace_id)
-            else:
-                spans = db.get_spans(trace_id=trace_id)
+            spans = await db_call(db.get_spans, trace_id=trace_id)
 
             # Build hierarchical response
             return TraceDetail.from_trace_and_spans(trace, spans)
@@ -576,28 +547,17 @@ def attach_routes(router: APIRouter, dbs: dict[str, list[Union[BaseDb, AsyncBase
             start_time_dt = timestamp_to_datetime(start_time, "start_time") if start_time else None
             end_time_dt = timestamp_to_datetime(end_time, "end_time") if end_time else None
 
-            if isinstance(db, AsyncBaseDb):
-                stats_list, total_count = await db.get_trace_stats(
-                    user_id=effective_user_id,
-                    agent_id=agent_id,
-                    team_id=team_id,
-                    workflow_id=workflow_id,
-                    start_time=start_time_dt,
-                    end_time=end_time_dt,
-                    limit=limit,
-                    page=page,
-                )
-            else:
-                stats_list, total_count = db.get_trace_stats(
-                    user_id=effective_user_id,
-                    agent_id=agent_id,
-                    team_id=team_id,
-                    workflow_id=workflow_id,
-                    start_time=start_time_dt,
-                    end_time=end_time_dt,
-                    limit=limit,
-                    page=page,
-                )
+            stats_list, total_count = await db_call(
+                db.get_trace_stats,
+                user_id=effective_user_id,
+                agent_id=agent_id,
+                team_id=team_id,
+                workflow_id=workflow_id,
+                start_time=start_time_dt,
+                end_time=end_time_dt,
+                limit=limit,
+                page=page,
+            )
 
             end_time_ms = time_module.time() * 1000
             search_time_ms = round(end_time_ms - start_time_ms, 2)
@@ -724,18 +684,12 @@ def attach_routes(router: APIRouter, dbs: dict[str, list[Union[BaseDb, AsyncBase
             # Branch based on group_by mode
             if body.group_by == TraceSearchGroupBy.SESSION:
                 # Session grouping - return TraceSessionStats
-                if isinstance(db, AsyncBaseDb):
-                    stats_list, total_count = await db.get_trace_stats(
-                        filter_expr=filter_expr_dict,
-                        limit=body.limit,
-                        page=body.page,
-                    )
-                else:
-                    stats_list, total_count = db.get_trace_stats(
-                        filter_expr=filter_expr_dict,
-                        limit=body.limit,
-                        page=body.page,
-                    )
+                stats_list, total_count = await db_call(
+                    db.get_trace_stats,
+                    filter_expr=filter_expr_dict,
+                    limit=body.limit,
+                    page=body.page,
+                )
 
                 end_time_ms = time_module.time() * 1000
                 search_time_ms = round(end_time_ms - start_time_ms, 2)
@@ -771,18 +725,12 @@ def attach_routes(router: APIRouter, dbs: dict[str, list[Union[BaseDb, AsyncBase
 
             else:
                 # Run grouping (default) - return TraceDetail
-                if isinstance(db, AsyncBaseDb):
-                    traces, total_count = await db.get_traces(
-                        filter_expr=filter_expr_dict,
-                        limit=body.limit,
-                        page=body.page,
-                    )
-                else:
-                    traces, total_count = db.get_traces(
-                        filter_expr=filter_expr_dict,
-                        limit=body.limit,
-                        page=body.page,
-                    )
+                traces, total_count = await db_call(
+                    db.get_traces,
+                    filter_expr=filter_expr_dict,
+                    limit=body.limit,
+                    page=body.page,
+                )
 
                 end_time_ms = time_module.time() * 1000
                 search_time_ms = round(end_time_ms - start_time_ms, 2)
@@ -793,10 +741,7 @@ def attach_routes(router: APIRouter, dbs: dict[str, list[Union[BaseDb, AsyncBase
                 # Build full TraceDetail (with span tree) for each trace
                 trace_details = []
                 for trace in traces:
-                    if isinstance(db, AsyncBaseDb):
-                        spans = await db.get_spans(trace_id=trace.trace_id)
-                    else:
-                        spans = db.get_spans(trace_id=trace.trace_id)
+                    spans = await db_call(db.get_spans, trace_id=trace.trace_id)
 
                     trace_details.append(TraceDetail.from_trace_and_spans(trace, spans))
 

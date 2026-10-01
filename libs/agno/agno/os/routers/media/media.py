@@ -16,6 +16,7 @@ from agno.os.auth import get_authentication_dependency
 from agno.os.middleware.user_scope import resolve_db_and_scope
 from agno.os.schema import NotFoundResponse, UnauthenticatedResponse
 from agno.os.settings import AgnoAPISettings
+from agno.os.utils import db_call
 from agno.remote.base import RemoteDb
 from agno.utils.log import log_warning
 from agno.utils.media_offload import iter_run_media, reference_matches_storage
@@ -113,14 +114,12 @@ def attach_routes(
                 raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
 
         session: Optional[Any]
-        if isinstance(db, AsyncBaseDb):
-            session = await db.get_session(  # type: ignore[union-attr]
-                session_id=session_id, session_type=session_type, user_id=effective_user_id
-            )
-        else:
-            session = db.get_session(  # type: ignore[union-attr]
-                session_id=session_id, session_type=session_type, user_id=effective_user_id
-            )
+        session = await db_call(
+            db.get_session,  # type: ignore[union-attr]
+            session_id=session_id,
+            session_type=session_type,
+            user_id=effective_user_id,
+        )
         if not session:
             raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
 

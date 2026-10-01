@@ -16,6 +16,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 
 from agno.db.base import BaseDb, SessionType
 from agno.db.schemas.jobs import QueuedJob
@@ -69,14 +70,14 @@ from agno.os.schema import (
 from agno.os.settings import AgnoAPISettings
 from agno.os.utils import (
     afinalize_continue_stream,
-    allow_draft_preview,
+    allow_draft_preview_async,
     amark_continue_stream_running,
     classify_upload_file,
     draft_preview_identity,
     find_factory_by_id,
     format_sse_event,
     get_request_kwargs,
-    get_team_by_id,
+    get_team_by_id_async,
     parse_files_metadata,
     process_audio,
     process_document,
@@ -1148,7 +1149,7 @@ def get_team_router(
             return JSONResponse(content={}, status_code=200)
 
         try:
-            team = get_team_by_id(
+            team = await get_team_by_id_async(
                 team_id=team_id,
                 teams=os.teams,
                 db=os.db,
@@ -1249,7 +1250,7 @@ def get_team_router(
                 detail="Stream resumption is not supported for factory teams",
             )
 
-        team = get_team_by_id(
+        team = await get_team_by_id_async(
             team_id=team_id,
             teams=os.teams,
             db=os.db,
@@ -1382,7 +1383,7 @@ def get_team_router(
             )
         else:
             try:
-                team = get_team_by_id(
+                team = await get_team_by_id_async(
                     team_id=team_id,
                     teams=os.teams,
                     db=os.db,
@@ -1437,10 +1438,12 @@ def get_team_router(
                 # must not resolve (defense against a forged/leaked stamp).
                 # Same 404 the run-start route raises, so a denial is
                 # indistinguishable from the component being absent.
-                if not allow_draft_preview(os.db, team_id, stamped_version, *draft_preview_identity(request)):
+                if not await allow_draft_preview_async(
+                    os.db, team_id, stamped_version, *draft_preview_identity(request)
+                ):
                     raise HTTPException(status_code=404, detail="Team not found")
                 try:
-                    stamped_team = get_team_by_id(
+                    stamped_team = await get_team_by_id_async(
                         team_id=team_id,
                         teams=os.teams,
                         db=os.db,
@@ -1721,7 +1724,7 @@ def get_team_router(
             user_id = request.state.user_id
 
         try:
-            team = get_team_by_id(
+            team = await get_team_by_id_async(
                 team_id=team_id,
                 teams=os.teams,
                 db=os.db,
@@ -1876,7 +1879,8 @@ def get_team_router(
             # rehydration context this route never lists - so subtracting it
             # would drop a stored team with nothing left to list it back.
             exclude_ids = {tid for t in os.teams or [] if (tid := getattr(t, "id", None)) is not None}
-            db_teams = get_teams(
+            db_teams = await run_in_threadpool(
+                get_teams,
                 db=os.db,
                 registry=registry,
                 exclude_component_ids=exclude_ids or None,
@@ -1986,7 +1990,7 @@ def get_team_router(
             return TeamResponse.from_factory(factory)
 
         try:
-            team = get_team_by_id(
+            team = await get_team_by_id_async(
                 team_id=team_id,
                 teams=os.teams,
                 db=os.db,
@@ -2043,7 +2047,7 @@ def get_team_router(
             )
         else:
             try:
-                team = get_team_by_id(
+                team = await get_team_by_id_async(
                     team_id=team_id,
                     teams=os.teams,
                     db=os.db,
@@ -2144,7 +2148,7 @@ def get_team_router(
             )
         else:
             try:
-                team = get_team_by_id(
+                team = await get_team_by_id_async(
                     team_id=team_id,
                     teams=os.teams,
                     db=os.db,
@@ -2215,7 +2219,7 @@ def get_team_router(
             )
         else:
             try:
-                team = get_team_by_id(
+                team = await get_team_by_id_async(
                     team_id=team_id,
                     teams=os.teams,
                     db=os.db,
@@ -2286,7 +2290,7 @@ def get_team_router(
             )
         else:
             try:
-                team = get_team_by_id(
+                team = await get_team_by_id_async(
                     team_id=team_id,
                     teams=os.teams,
                     db=os.db,

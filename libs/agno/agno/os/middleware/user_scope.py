@@ -47,7 +47,7 @@ from fastapi import HTTPException, Query, Request
 from agno.db.base import AsyncBaseDb, BaseDb
 from agno.db.schemas.service_accounts import SERVICE_ACCOUNT_PRINCIPAL_PREFIX
 from agno.os.scopes import AgentOSScope
-from agno.os.utils import get_db
+from agno.os.utils import db_call, get_db
 from agno.remote.base import RemoteDb
 from agno.utils.log import log_warning
 
@@ -458,10 +458,9 @@ async def assert_session_writable(
 
     # user_id is deliberately NOT passed: the probe must see the row regardless of owner.
     # deserialize=False keeps it a raw dict; runs_limit=1 bounds the run attach.
-    if isinstance(db, AsyncBaseDb):
-        row = await db.get_session(session_id=session_id, session_type=session_type, deserialize=False, runs_limit=1)
-    else:
-        row = db.get_session(session_id=session_id, session_type=session_type, deserialize=False, runs_limit=1)
+    row = await db_call(
+        db.get_session, session_id=session_id, session_type=session_type, deserialize=False, runs_limit=1
+    )
     if not row:
         return
     owner = row.get("user_id") if isinstance(row, dict) else getattr(row, "user_id", None)
@@ -529,10 +528,7 @@ async def verify_run_in_session_via_db(
         # No DB to verify against — fail closed.
         raise HTTPException(status_code=404, detail="Run not found")
 
-    if isinstance(db, AsyncBaseDb):
-        session = await db.get_session(session_id=session_id, user_id=user_id)
-    else:
-        session = db.get_session(session_id=session_id, user_id=user_id)
+    session = await db_call(db.get_session, session_id=session_id, user_id=user_id)
 
     if session is None:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -558,7 +554,7 @@ def resolve_owned_agent(os: "AgentOS") -> Callable:
     raise 404 so the existence of another user's run isn't leaked. Admins and
     unauthenticated callers bypass the ownership check entirely.
     """
-    from agno.os.utils import get_agent_by_id
+    from agno.os.utils import get_agent_by_id_async
 
     async def dependency(
         request: Request,
@@ -569,7 +565,7 @@ def resolve_owned_agent(os: "AgentOS") -> Callable:
             description="Session ID the run belongs to. Required for non-admin JWT users.",
         ),
     ) -> "Union[Agent, RemoteAgent, AgentProtocol]":
-        agent = get_agent_by_id(
+        agent = await get_agent_by_id_async(
             agent_id=agent_id,
             agents=os.agents,
             db=os.db,
@@ -601,7 +597,7 @@ def resolve_owned_team(os: "AgentOS") -> Callable:
 
     See ``resolve_owned_agent`` for behaviour.
     """
-    from agno.os.utils import get_team_by_id
+    from agno.os.utils import get_team_by_id_async
 
     async def dependency(
         request: Request,
@@ -612,7 +608,7 @@ def resolve_owned_team(os: "AgentOS") -> Callable:
             description="Session ID the run belongs to. Required for non-admin JWT users.",
         ),
     ) -> "Union[Team, RemoteTeam]":
-        team = get_team_by_id(
+        team = await get_team_by_id_async(
             team_id=team_id,
             teams=os.teams,
             db=os.db,
@@ -644,7 +640,7 @@ def resolve_owned_workflow(os: "AgentOS") -> Callable:
 
     See ``resolve_owned_agent`` for behaviour.
     """
-    from agno.os.utils import get_workflow_by_id
+    from agno.os.utils import get_workflow_by_id_async
 
     async def dependency(
         request: Request,
@@ -655,7 +651,7 @@ def resolve_owned_workflow(os: "AgentOS") -> Callable:
             description="Session ID the run belongs to. Required for non-admin JWT users.",
         ),
     ) -> "Union[Workflow, RemoteWorkflow]":
-        workflow = get_workflow_by_id(
+        workflow = await get_workflow_by_id_async(
             workflow_id=workflow_id,
             workflows=os.workflows,
             db=os.db,

@@ -1,6 +1,5 @@
 """Approval API router -- list, resolve, and delete human approvals."""
 
-import asyncio
 import time
 from typing import Any, Dict, Literal, Optional
 
@@ -14,6 +13,7 @@ from agno.os.routers.approvals.schema import (
     ApprovalStatusResponse,
 )
 from agno.os.schema import PaginatedResponse, PaginationInfo
+from agno.os.utils import db_call
 
 
 def get_approval_router(os_db: Any, settings: Any) -> APIRouter:
@@ -54,9 +54,7 @@ def get_approval_router(os_db: Any, settings: Any) -> APIRouter:
         if fn is None:
             raise HTTPException(status_code=503, detail="Approvals not supported by the configured database")
         try:
-            if asyncio.iscoroutinefunction(fn):
-                return await fn(*args, **kwargs)
-            return fn(*args, **kwargs)
+            return await db_call(fn, *args, **kwargs)
         except NotImplementedError:
             raise HTTPException(status_code=503, detail="Approvals not supported by the configured database")
 

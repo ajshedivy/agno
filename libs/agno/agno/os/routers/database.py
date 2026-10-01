@@ -8,7 +8,6 @@ from fastapi import (
 from fastapi.responses import JSONResponse
 from packaging import version
 
-from agno.db.base import AsyncBaseDb
 from agno.db.migrations.manager import MigrationManager
 from agno.exceptions import AgnoError
 from agno.os.auth import get_authentication_dependency
@@ -22,6 +21,7 @@ from agno.os.schema import (
 from agno.os.settings import AgnoAPISettings
 from agno.os.utils import (
     AgnoHTTPException,
+    db_call,
     get_db,
 )
 from agno.remote.base import RemoteDb
@@ -58,10 +58,7 @@ def get_database_router(
 
         if target_version:
             # Use the session table as proxy for the database schema version
-            if isinstance(db, AsyncBaseDb):
-                current_version = await db.get_latest_schema_version(db.session_table_name)
-            else:
-                current_version = db.get_latest_schema_version(db.session_table_name)
+            current_version = await db_call(db.get_latest_schema_version, db.session_table_name)
 
             if version.parse(target_version) > version.parse(current_version):  # type: ignore
                 await MigrationManager(db).up(target_version)  # type: ignore

@@ -164,11 +164,11 @@ class TestStartWorkflowNeverAdoptsTheClientFrameIdentity:
     def _record_resolution(monkeypatch):
         calls: List[dict] = []
 
-        def fake_get_workflow_by_id(**kwargs):
+        async def fake_get_workflow_by_id(**kwargs):
             calls.append(kwargs)
             return None
 
-        monkeypatch.setattr("agno.os.routers.workflows.router.get_workflow_by_id", fake_get_workflow_by_id)
+        monkeypatch.setattr("agno.os.routers.workflows.router.get_workflow_by_id_async", fake_get_workflow_by_id)
         return calls
 
     async def test_subless_token_isolation_off_does_not_adopt_the_client_user_id(self, tmp_path, monkeypatch):
@@ -273,13 +273,13 @@ class TestContinueNeverAdoptsTheClientFrameIdentity:
             async def aget_run_output(self, **kwargs):
                 return SimpleNamespace(is_paused=True, status=None, metadata={COMPONENT_VERSION_METADATA_KEY: 1})
 
-        def fake_get_workflow_by_id(**kwargs):
+        async def fake_get_workflow_by_id(**kwargs):
             calls.append(kwargs)
             if kwargs.get("version") is not None:
                 return None
             return PausedWorkflowStub()
 
-        monkeypatch.setattr("agno.os.routers.workflows.router.get_workflow_by_id", fake_get_workflow_by_id)
+        monkeypatch.setattr("agno.os.routers.workflows.router.get_workflow_by_id_async", fake_get_workflow_by_id)
         return calls
 
     async def _continue(self, db, frame_user_id, token_user_id):
@@ -402,26 +402,26 @@ def _gate_spy(monkeypatch) -> List[dict]:
     """Record the actor every draft-preview gate decision runs as."""
     import agno.os.routers.workflows.router as wf_router
 
-    real = wf_router.allow_draft_preview
+    real = wf_router.allow_draft_preview_async
     calls: List[dict] = []
 
-    def spy(db, component_id, version, actor, privileged=False):
-        result = real(db, component_id, version, actor, privileged=privileged)
+    async def spy(db, component_id, version, actor, privileged=False):
+        result = await real(db, component_id, version, actor, privileged=privileged)
         calls.append({"actor": actor, "privileged": privileged, "result": result})
         return result
 
-    monkeypatch.setattr(wf_router, "allow_draft_preview", spy)
+    monkeypatch.setattr(wf_router, "allow_draft_preview_async", spy)
     return calls
 
 
 def _record_start_resolution(monkeypatch) -> List[dict]:
     calls: List[dict] = []
 
-    def fake_get_workflow_by_id(**kwargs):
+    async def fake_get_workflow_by_id(**kwargs):
         calls.append(kwargs)
         return None
 
-    monkeypatch.setattr("agno.os.routers.workflows.router.get_workflow_by_id", fake_get_workflow_by_id)
+    monkeypatch.setattr("agno.os.routers.workflows.router.get_workflow_by_id_async", fake_get_workflow_by_id)
     return calls
 
 
@@ -438,13 +438,13 @@ def _record_continue_resolution(monkeypatch) -> List[dict]:
         async def aget_run_output(self, **kwargs):
             return SimpleNamespace(is_paused=True, status=None, metadata={COMPONENT_VERSION_METADATA_KEY: 1})
 
-    def fake_get_workflow_by_id(**kwargs):
+    async def fake_get_workflow_by_id(**kwargs):
         calls.append(kwargs)
         if kwargs.get("version") is not None:
             return None
         return PausedWorkflowStub()
 
-    monkeypatch.setattr("agno.os.routers.workflows.router.get_workflow_by_id", fake_get_workflow_by_id)
+    monkeypatch.setattr("agno.os.routers.workflows.router.get_workflow_by_id_async", fake_get_workflow_by_id)
     return calls
 
 

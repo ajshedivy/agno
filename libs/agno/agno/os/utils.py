@@ -1,11 +1,13 @@
 import json
 from datetime import date, datetime, time, timezone
+from inspect import iscoroutinefunction
 from os import getenv
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Type, Union
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.routing import APIRoute, APIRouter
 from pydantic import BaseModel, create_model
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.cors import CORSMiddleware
 
 from agno.agent import Agent, AgentFactory, RemoteAgent
@@ -718,6 +720,17 @@ def replayed_payload_to_sse(payload: Any, event_index: int, run_id: str) -> str:
     return format_sse_event_with_index(payload, event_index=event_index, run_id=run_id)
 
 
+async def db_call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """Call a database method without blocking the event loop.
+
+    Async methods are awaited. Sync drivers do blocking I/O, so their methods run
+    in the threadpool (which copies the caller's contextvars into the worker).
+    """
+    if iscoroutinefunction(fn):
+        return await fn(*args, **kwargs)
+    return await run_in_threadpool(fn, *args, **kwargs)
+
+
 async def get_db(
     dbs: dict[str, list[Union[BaseDb, AsyncBaseDb, RemoteDb]]], db_id: Optional[str] = None, table: Optional[str] = None
 ) -> Union[BaseDb, AsyncBaseDb, RemoteDb]:
@@ -753,12 +766,7 @@ async def get_db(
 
         # Then check if table actually exists in the database
         try:
-            if isinstance(db, AsyncBaseDb):
-                # For async databases, await the check
-                return await db.table_exists(table_name)
-            else:
-                # For sync databases, call directly
-                return db.table_exists(table_name)
+            return await db_call(db.table_exists, table_name)
         except (NotImplementedError, AttributeError):
             # If table_exists not implemented, fall back to configuration check
             return is_configured
@@ -1410,6 +1418,19 @@ def allow_draft_preview(
     return bool(isinstance(component, dict) and component.get("user_id") == actor)
 
 
+async def allow_draft_preview_async(
+    db: Optional[Union[BaseDb, AsyncBaseDb]],
+    component_id: str,
+    version: Optional[int],
+    actor: Optional[str],
+    privileged: bool = False,
+) -> bool:
+    """Async variant of allow_draft_preview: its db reads run in the threadpool."""
+    if version is None or not isinstance(db, BaseDb):
+        return True
+    return await run_in_threadpool(allow_draft_preview, db, component_id, version, actor, privileged)
+
+
 def get_agent_by_id(
     agent_id: str,
     agents: Optional[Sequence[Union[Agent, RemoteAgent, AgentProtocol, AgentFactory]]] = None,
@@ -1535,7 +1556,8 @@ async def get_agent_by_id_async(
         from agno.agent.agent import get_agent_by_id as get_agent_by_id_db
 
         try:
-            db_agent = get_agent_by_id_db(
+            db_agent = await run_in_threadpool(
+                get_agent_by_id_db,
                 db=db,
                 id=agent_id,
                 version=version,
@@ -1666,7 +1688,8 @@ async def get_team_by_id_async(
         from agno.team.team import get_team_by_id as get_team_by_id_db
 
         try:
-            db_team = get_team_by_id_db(
+            db_team = await run_in_threadpool(
+                get_team_by_id_db,
                 db=db,
                 id=team_id,
                 version=version,
@@ -1804,7 +1827,8 @@ async def get_workflow_by_id_async(
         from agno.workflow.workflow import get_workflow_by_id as get_workflow_by_id_db
 
         try:
-            db_workflow = get_workflow_by_id_db(
+            db_workflow = await run_in_threadpool(
+                get_workflow_by_id_db,
                 db=db,
                 id=workflow_id,
                 version=version,
@@ -2805,7 +2829,7 @@ async def resolve_agent(
         scoped_user_id = get_scoped_user_id(request)
     # An explicit draft version is a control-plane preview: owner/admin only.
     preview_actor, preview_privileged = draft_preview_identity(request)
-    if not allow_draft_preview(db, agent_id, version, preview_actor, privileged=preview_privileged):
+    if not await allow_draft_preview_async(db, agent_id, version, preview_actor, privileged=preview_privileged):
         # Byte-identical to the route's plain not-found: the denial must not
         # read differently from the component being absent.
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -2838,7 +2862,7 @@ async def resolve_agent(
             raise HTTPException(status_code=500, detail=f"Error in agent factory: {e}")
     else:
         try:
-            agent = get_agent_by_id(
+            agent = await get_agent_by_id_async(
                 agent_id,
                 agents,
                 db,
@@ -2884,7 +2908,7 @@ async def resolve_team(
         scoped_user_id = get_scoped_user_id(request)
     # An explicit draft version is a control-plane preview: owner/admin only.
     preview_actor, preview_privileged = draft_preview_identity(request)
-    if not allow_draft_preview(db, team_id, version, preview_actor, privileged=preview_privileged):
+    if not await allow_draft_preview_async(db, team_id, version, preview_actor, privileged=preview_privileged):
         # Byte-identical to the route's plain not-found: the denial must not
         # read differently from the component being absent.
         raise HTTPException(status_code=404, detail="Team not found")
@@ -2917,7 +2941,7 @@ async def resolve_team(
             raise HTTPException(status_code=500, detail=f"Error in team factory: {e}")
     else:
         try:
-            team = get_team_by_id(
+            team = await get_team_by_id_async(
                 team_id,
                 teams,
                 db=db,
@@ -2963,7 +2987,7 @@ async def resolve_workflow(
         scoped_user_id = get_scoped_user_id(request)
     # An explicit draft version is a control-plane preview: owner/admin only.
     preview_actor, preview_privileged = draft_preview_identity(request)
-    if not allow_draft_preview(db, workflow_id, version, preview_actor, privileged=preview_privileged):
+    if not await allow_draft_preview_async(db, workflow_id, version, preview_actor, privileged=preview_privileged):
         # Byte-identical to the route's plain not-found: the denial must not
         # read differently from the component being absent.
         raise HTTPException(status_code=404, detail="Workflow not found")
@@ -2996,7 +3020,7 @@ async def resolve_workflow(
             raise HTTPException(status_code=500, detail=f"Error in workflow factory: {e}")
     else:
         try:
-            workflow = get_workflow_by_id(
+            workflow = await get_workflow_by_id_async(
                 workflow_id,
                 workflows,
                 db=db,

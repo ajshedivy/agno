@@ -1,12 +1,10 @@
 """Service accounts API router - mint, list, and revoke opaque machine tokens."""
 
-import asyncio
 import time
 from typing import Any, List, Literal, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.concurrency import run_in_threadpool
 
 from agno.db.schemas.service_accounts import ServiceAccount
 from agno.os.middleware.user_scope import get_scoped_user_id
@@ -16,6 +14,7 @@ from agno.os.routers.service_accounts.schema import (
     ServiceAccountResponse,
 )
 from agno.os.schema import PaginatedResponse, PaginationInfo
+from agno.os.utils import db_call
 from agno.os.scopes import AgentOSScope, has_required_scopes, parse_scope
 from agno.os.service_accounts import (
     DEFAULT_EXPIRY_DAYS,
@@ -84,11 +83,7 @@ def get_service_accounts_router(os_db: Any, settings: Any) -> APIRouter:
         if fn is None:
             raise HTTPException(status_code=503, detail="Service accounts not supported by the configured database")
         try:
-            if asyncio.iscoroutinefunction(fn):
-                return await fn(*args, **kwargs)
-            # Sync DB drivers do blocking I/O; keep it off the event loop like the
-            # services layer and the ServiceAccountVerifier do.
-            return await run_in_threadpool(fn, *args, **kwargs)
+            return await db_call(fn, *args, **kwargs)
         except NotImplementedError:
             raise HTTPException(status_code=503, detail="Service accounts not supported by the configured database")
 
