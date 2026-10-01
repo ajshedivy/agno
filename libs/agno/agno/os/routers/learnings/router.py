@@ -30,7 +30,7 @@ from agno.os.schema import (
     ValidationErrorResponse,
 )
 from agno.os.settings import AgnoAPISettings
-from agno.os.utils import AgnoHTTPException, get_db
+from agno.os.utils import AgnoHTTPException, db_call, get_db
 from agno.remote.base import RemoteDb
 
 logger = logging.getLogger(__name__)
@@ -129,38 +129,22 @@ def _attach_routes(router: APIRouter, dbs: dict[str, list[Union[BaseDb, AsyncBas
             raise HTTPException(status_code=501, detail="Learnings endpoints not supported on remote DBs")
 
         try:
-            if isinstance(db, AsyncBaseDb):
-                records, total_count = await db.list_learnings(
-                    learning_type=learning_type,
-                    user_id=user_id,
-                    agent_id=agent_id,
-                    team_id=team_id,
-                    session_id=session_id,
-                    namespace=namespace,
-                    entity_id=entity_id,
-                    entity_type=entity_type,
-                    include_global=include_global,
-                    limit=limit,
-                    page=page,
-                    sort_by=sort_by,
-                    sort_order=sort_order.value if sort_order else None,
-                )
-            else:
-                records, total_count = cast(BaseDb, db).list_learnings(
-                    learning_type=learning_type,
-                    user_id=user_id,
-                    agent_id=agent_id,
-                    team_id=team_id,
-                    session_id=session_id,
-                    namespace=namespace,
-                    entity_id=entity_id,
-                    entity_type=entity_type,
-                    include_global=include_global,
-                    limit=limit,
-                    page=page,
-                    sort_by=sort_by,
-                    sort_order=sort_order.value if sort_order else None,
-                )
+            records, total_count = await db_call(
+                db.list_learnings,
+                learning_type=learning_type,
+                user_id=user_id,
+                agent_id=agent_id,
+                team_id=team_id,
+                session_id=session_id,
+                namespace=namespace,
+                entity_id=entity_id,
+                entity_type=entity_type,
+                include_global=include_global,
+                limit=limit,
+                page=page,
+                sort_by=sort_by,
+                sort_order=sort_order.value if sort_order else None,
+            )
         except NotImplementedError:
             raise HTTPException(status_code=501, detail="Learnings not supported by the configured database")
         except AgnoError as e:
@@ -267,49 +251,28 @@ def _attach_routes(router: APIRouter, dbs: dict[str, list[Union[BaseDb, AsyncBas
             namespace = DEFAULT_LEARNING_NAMESPACE
 
         try:
-            if isinstance(db, AsyncBaseDb):
-                # Identity-keyed record already exists -> don't silently overwrite agent-curated
-                # data; steer the caller to PATCH.
-                if deterministic_id is not None and await db.get_learning_by_id(learning_id) is not None:
-                    raise HTTPException(
-                        status_code=409,
-                        detail=_duplicate_identity_detail(body.learning_type, learning_id),
-                    )
-                await db.upsert_learning(
-                    id=learning_id,
-                    learning_type=body.learning_type,
-                    content=body.content,
-                    user_id=body.user_id,
-                    agent_id=body.agent_id,
-                    team_id=body.team_id,
-                    session_id=body.session_id,
-                    namespace=namespace,
-                    entity_id=body.entity_id,
-                    entity_type=body.entity_type,
-                    metadata=body.metadata,
+            # Identity-keyed record already exists -> don't silently overwrite agent-curated
+            # data; steer the caller to PATCH.
+            if deterministic_id is not None and await db_call(db.get_learning_by_id, learning_id) is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=_duplicate_identity_detail(body.learning_type, learning_id),
                 )
-                created = await db.get_learning_by_id(learning_id)
-            else:
-                sync_db = cast(BaseDb, db)
-                if deterministic_id is not None and sync_db.get_learning_by_id(learning_id) is not None:
-                    raise HTTPException(
-                        status_code=409,
-                        detail=_duplicate_identity_detail(body.learning_type, learning_id),
-                    )
-                sync_db.upsert_learning(
-                    id=learning_id,
-                    learning_type=body.learning_type,
-                    content=body.content,
-                    user_id=body.user_id,
-                    agent_id=body.agent_id,
-                    team_id=body.team_id,
-                    session_id=body.session_id,
-                    namespace=namespace,
-                    entity_id=body.entity_id,
-                    entity_type=body.entity_type,
-                    metadata=body.metadata,
-                )
-                created = sync_db.get_learning_by_id(learning_id)
+            await db_call(
+                db.upsert_learning,
+                id=learning_id,
+                learning_type=body.learning_type,
+                content=body.content,
+                user_id=body.user_id,
+                agent_id=body.agent_id,
+                team_id=body.team_id,
+                session_id=body.session_id,
+                namespace=namespace,
+                entity_id=body.entity_id,
+                entity_type=body.entity_type,
+                metadata=body.metadata,
+            )
+            created = await db_call(db.get_learning_by_id, learning_id)
         except NotImplementedError:
             raise HTTPException(status_code=501, detail="Learnings not supported by the configured database")
         except HTTPException:
@@ -365,24 +328,15 @@ def _attach_routes(router: APIRouter, dbs: dict[str, list[Union[BaseDb, AsyncBas
             raise HTTPException(status_code=501, detail="Learnings endpoints not supported on remote DBs")
 
         try:
-            if isinstance(db, AsyncBaseDb):
-                records, total_count = await db.get_learnings_user_stats(
-                    learning_type=learning_type,
-                    user_id=user_id,
-                    limit=limit,
-                    page=page,
-                    sort_by=sort_by,
-                    sort_order=sort_order.value if sort_order else None,
-                )
-            else:
-                records, total_count = cast(BaseDb, db).get_learnings_user_stats(
-                    learning_type=learning_type,
-                    user_id=user_id,
-                    limit=limit,
-                    page=page,
-                    sort_by=sort_by,
-                    sort_order=sort_order.value if sort_order else None,
-                )
+            records, total_count = await db_call(
+                db.get_learnings_user_stats,
+                learning_type=learning_type,
+                user_id=user_id,
+                limit=limit,
+                page=page,
+                sort_by=sort_by,
+                sort_order=sort_order.value if sort_order else None,
+            )
         except NotImplementedError:
             raise HTTPException(status_code=501, detail="Learnings not supported by the configured database")
         except AgnoError as e:
@@ -435,10 +389,7 @@ def _attach_routes(router: APIRouter, dbs: dict[str, list[Union[BaseDb, AsyncBas
             raise HTTPException(status_code=501, detail="Learnings endpoints not supported on remote DBs")
 
         try:
-            if isinstance(db, AsyncBaseDb):
-                await db.delete_user_learnings(user_id, learning_type=learning_type)
-            else:
-                cast(BaseDb, db).delete_user_learnings(user_id, learning_type=learning_type)
+            await db_call(db.delete_user_learnings, user_id, learning_type=learning_type)
         except NotImplementedError:
             raise HTTPException(status_code=501, detail="Learnings not supported by the configured database")
         except AgnoError as e:
@@ -509,10 +460,12 @@ def _attach_routes(router: APIRouter, dbs: dict[str, list[Union[BaseDb, AsyncBas
         # writes). A plain UPDATE avoids all of that: a vanished row simply isn't matched -> 404,
         # and a concurrent agent re-create resolves as last-write-wins, never data loss.
         try:
-            if isinstance(db, AsyncBaseDb):
-                matched = await db.update_learning(learning_id, content=new_content, metadata=new_metadata)
-            else:
-                matched = cast(BaseDb, db).update_learning(learning_id, content=new_content, metadata=new_metadata)
+            matched = await db_call(
+                cast(Union[BaseDb, AsyncBaseDb], db).update_learning,
+                learning_id,
+                content=new_content,
+                metadata=new_metadata,
+            )
         except NotImplementedError:
             raise HTTPException(status_code=501, detail="Learnings not supported by the configured database")
         except AgnoError as e:
@@ -548,10 +501,7 @@ def _attach_routes(router: APIRouter, dbs: dict[str, list[Union[BaseDb, AsyncBas
         _enforce_user_scope(request, existing, mutating=True)
 
         try:
-            if isinstance(db, AsyncBaseDb):
-                deleted = await db.delete_learning(learning_id)
-            else:
-                deleted = cast(BaseDb, db).delete_learning(learning_id)
+            deleted = await db_call(cast(Union[BaseDb, AsyncBaseDb], db).delete_learning, learning_id)
         except NotImplementedError:
             raise HTTPException(status_code=501, detail="Learnings not supported by the configured database")
 
@@ -565,10 +515,7 @@ async def _fetch_learning(db: Union[BaseDb, AsyncBaseDb, RemoteDb], learning_id:
     if isinstance(db, RemoteDb):
         raise HTTPException(status_code=501, detail="Learnings endpoints not supported on remote DBs")
     try:
-        if isinstance(db, AsyncBaseDb):
-            record = await db.get_learning_by_id(learning_id)
-        else:
-            record = cast(BaseDb, db).get_learning_by_id(learning_id)
+        record = await db_call(db.get_learning_by_id, learning_id)
     except NotImplementedError:
         raise HTTPException(status_code=501, detail="Learnings not supported by the configured database")
     except AgnoError as e:
