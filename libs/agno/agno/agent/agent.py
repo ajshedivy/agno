@@ -870,6 +870,7 @@ class Agent:
         session: AgentSession,
         user_id: Optional[str] = None,
         check_mcp_tools: bool = True,
+        connect_tools: bool = True,
     ) -> List[Union[Toolkit, Callable, Function, Dict]]:
         return await _tools.aget_tools(
             self,
@@ -878,6 +879,7 @@ class Agent:
             session=session,
             user_id=user_id,
             check_mcp_tools=check_mcp_tools,
+            connect_tools=connect_tools,
         )
 
     @staticmethod

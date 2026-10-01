@@ -320,7 +320,15 @@ async def aget_tools(
     session: AgentSession,
     user_id: Optional[str] = None,
     check_mcp_tools: bool = True,
+    connect_tools: bool = True,
 ) -> List[Union[Toolkit, Callable, Function, Dict]]:
+    """The tools for a run of ``agent``.
+
+    ``connect_tools=False`` describes the tools without opening any
+    connection: no MCP or connectable tool is connected or refreshed, so a
+    caller that only lists them (the AgentOS agent routes) has nothing to
+    close. An MCP toolkit that is not connected yet contributes no functions.
+    """
     from agno.agent import _default_tools, _init
     from agno.utils.callables import (
         aresolve_callable_knowledge,
@@ -342,11 +350,12 @@ async def aget_tools(
     if run_context.client_tools:
         resolved_tools = list(resolved_tools or []) + list(run_context.client_tools)
 
-    # Connect tools that require connection management
-    _init.connect_connectable_tools(agent)
+    if connect_tools:
+        # Connect tools that require connection management
+        _init.connect_connectable_tools(agent)
 
-    # Connect MCP tools
-    await _init.connect_mcp_tools(agent)
+        # Connect MCP tools
+        await _init.connect_mcp_tools(agent)
 
     # Add provided tools
     if resolved_tools is not None:
@@ -355,7 +364,7 @@ async def aget_tools(
             is_mcp_tool = hasattr(type(tool), "__mro__") and any(c.__name__ == "MCPTools" for c in type(tool).__mro__)
 
             if is_mcp_tool:
-                if tool.refresh_connection:  # type: ignore
+                if connect_tools and tool.refresh_connection:  # type: ignore
                     try:
                         is_alive = await tool.is_alive()  # type: ignore
                         if not is_alive:

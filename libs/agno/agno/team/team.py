@@ -1483,6 +1483,7 @@ class Team:
         stream: Optional[bool] = None,
         stream_events: Optional[bool] = None,
         check_mcp_tools: bool = True,
+        connect_tools: bool = True,
     ) -> List[Union[Function, dict]]:
         # Connect tools that require connection management
         return _tools._determine_tools_for_model(
@@ -1506,6 +1507,7 @@ class Team:
             stream=stream,
             stream_events=stream_events,
             check_mcp_tools=check_mcp_tools,
+            connect_tools=connect_tools,
         )
 
     def get_members_system_message_content(

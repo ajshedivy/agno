@@ -132,6 +132,7 @@ def _determine_tools_for_model(
     stream_events: Optional[bool] = None,
     check_mcp_tools: bool = True,
     learning_tools: Optional[List[Callable]] = None,
+    connect_tools: bool = True,
 ) -> List[Union[Function, dict]]:
     # Connect tools that require connection management
     from functools import partial
@@ -171,9 +172,12 @@ def _determine_tools_for_model(
     if run_context.client_tools:
         resolved_tools = list(resolved_tools or []) + list(run_context.client_tools)
 
-    _connect_connectable_tools(
-        team,
-    )
+    # connect_tools=False describes the tools without opening a connection
+    # (the AgentOS team routes list them and would have nothing to close).
+    if connect_tools:
+        _connect_connectable_tools(
+            team,
+        )
 
     # Prepare tools
     _tools: List[Union[Toolkit, Callable, Function, Dict]] = []
